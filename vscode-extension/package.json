@@ -1,0 +1,49 @@
+{
+  "name": "collie-lsp-test",
+  "displayName": "Collie LSP Test",
+  "description": "Test extension for collie-lsp",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:yacc"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "yacc",
+      "extensions": [".y"],
+      "aliases": ["Yacc", "yacc"]
+    }],
+    "configuration": {
+      "type": "object",
+      "title": "Collie LSP",
+      "properties": {
+        "collie-lsp.serverPath": {
+          "type": "string",
+          "default": "collie-lsp",
+          "description": "Path to collie-lsp executable"
+        },
+        "collie-lsp.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "verbose",
+          "description": "Traces the communication between VS Code and the language server"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

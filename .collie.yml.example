@@ -1,0 +1,144 @@
+# Example collie-lsp configuration file
+# Copy this file to .collie.yml and customize as needed
+
+# Inherit configuration from another file (optional)
+# inherit_from: .collie_base.yml
+
+# Linter rules configuration
+rules:
+  # Validation rules (severity: error)
+  DuplicateToken:
+    enabled: true
+    severity: error
+
+  UndefinedSymbol:
+    enabled: true
+    severity: error
+
+  UnreachableRule:
+    enabled: true
+    severity: error
+
+  CircularReference:
+    enabled: true
+    severity: error
+
+  MissingStartSymbol:
+    enabled: true
+    severity: error
+
+  # Warning rules (severity: warning)
+  UnusedNonterminal:
+    enabled: true
+    severity: warning
+
+  UnusedToken:
+    enabled: true
+    severity: warning
+
+  LeftRecursion:
+    enabled: true
+    severity: warning
+
+  RightRecursion:
+    enabled: true
+    severity: warning
+
+  AmbiguousPrecedence:
+    enabled: true
+    severity: warning
+
+  # Style rules (severity: convention)
+  TokenNaming:
+    enabled: true
+    severity: convention
+    # Tokens should be UPPER_CASE
+    pattern: '^[A-Z][A-Z0-9_]*$'
+
+  NonterminalNaming:
+    enabled: true
+    severity: convention
+    # Nonterminals should be snake_case
+    pattern: '^[a-z][a-z0-9_]*$'
+
+  ActionVariableNaming:
+    enabled: true
+    severity: convention
+
+  ConsistentTagNaming:
+    enabled: true
+    severity: convention
+
+  TrailingWhitespace:
+    enabled: true
+    severity: convention
+
+  EmptyAction:
+    enabled: false
+    severity: convention
+
+  LongRule:
+    enabled: true
+    severity: convention
+    max_alternatives: 10
+
+  # Optimization rules (severity: info)
+  FactorizableRules:
+    enabled: false
+    severity: info
+
+  RedundantEpsilon:
+    enabled: false
+    severity: info
+
+  PrecImprovement:
+    enabled: false
+    severity: info
+
+# Formatter configuration
+formatter:
+  # Number of spaces for indentation
+  indent_size: 4
+
+  # Align token declarations
+  align_tokens: true
+
+  # Align rule alternatives
+  align_alternatives: true
+
+  # Number of blank lines around section separators (%%)
+  blank_lines_around_sections: 2
+
+  # Maximum line length before wrapping
+  max_line_length: 120
+
+  # Preserve blank lines between rules
+  preserve_blank_lines: true
+
+  # Sort token declarations alphabetically
+  sort_tokens: false
+
+# File patterns
+include:
+  - '**/*.y'
+  - '**/*.yacc'
+
+exclude:
+  - 'vendor/**/*'
+  - 'tmp/**/*'
+  - 'node_modules/**/*'
+  - '.git/**/*'
+
+# Editor integration settings
+editor:
+  # Show diagnostics on save only (vs. on change)
+  diagnostics_on_save: false
+
+  # Debounce delay for diagnostics (milliseconds)
+  diagnostics_delay: 300
+
+  # Enable semantic tokens
+  semantic_tokens: true
+
+  # Enable code folding
+  folding: true
