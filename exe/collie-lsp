@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'bundler/setup'
+require 'collie_lsp'
+
+# Start the LSP server
+server = CollieLsp::Server.new
+server.start
