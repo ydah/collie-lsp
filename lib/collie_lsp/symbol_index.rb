@@ -16,7 +16,7 @@ module CollieLsp
       line = text.lines[position[:line]]
       return nil unless line
 
-      character = [position[:character], line.length].min
+      character = Position.utf16_to_codepoint_index(line, position[:character])
       action_ref_at(line, character) || identifier_at(line, character)
     end
 

@@ -70,6 +70,10 @@ module CollieLsp
         Protocol::TextDocument.handle_did_close(request, @document_store, @collie, @writer)
       when 'textDocument/formatting'
         Handlers::Formatting.handle(request, @document_store, @collie, @writer)
+      when 'textDocument/rangeFormatting'
+        Handlers::Formatting.handle_range(request, @document_store, @collie, @writer)
+      when 'textDocument/onTypeFormatting'
+        Handlers::Formatting.handle_on_type(request, @document_store, @collie, @writer)
       when 'textDocument/codeAction'
         Handlers::CodeAction.handle(request, @document_store, @collie, @writer)
       when 'textDocument/hover'

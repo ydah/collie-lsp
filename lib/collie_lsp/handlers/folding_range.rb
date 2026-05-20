@@ -36,20 +36,20 @@ module CollieLsp
         ranges = []
 
         # Add ranges from AST if available
-        ranges.concat(build_ast_folding_ranges(ast)) if ast
+        ranges.concat(build_ast_folding_ranges(text, ast)) if ast
 
         # Add ranges from text structure
         ranges.concat(build_text_folding_ranges(text))
 
-        # Sort and remove overlaps
-        ranges.sort_by { |r| [r[:startLine], r[:endLine]] }
+        stable_non_overlapping_ranges(ranges)
       end
 
       # Build folding ranges from AST
       # @param ast [Hash] Parsed AST
       # @return [Array<Hash>] Folding ranges
-      def build_ast_folding_ranges(ast)
+      def build_ast_folding_ranges(text, ast)
         ranges = []
+        lines = text.lines
 
         # Fold grammar rules with multiple alternatives
         rules = rules_from_ast(ast)
@@ -61,7 +61,7 @@ module CollieLsp
 
           # Find the end of the rule (look for semicolon)
           start_line = line_for(location) - 1
-          end_line = find_rule_end_line(rule, rules)
+          end_line = find_rule_end_line(rule, rules, lines)
 
           # Only create a range if the rule spans multiple lines
           ranges << create_folding_range(start_line, end_line, 'region') if end_line && end_line > start_line
@@ -93,8 +93,11 @@ module CollieLsp
       # @param rule [Hash] Rule
       # @param ast [Hash] AST (for context)
       # @return [Integer, nil] End line number or nil
-      def find_rule_end_line(rule, rules)
-        # Find the next rule's start line
+      def find_rule_end_line(rule, rules, lines)
+        start_line = line_for(value(rule, :location)) - 1
+        explicit_end = find_semicolon_line(lines, start_line)
+        return explicit_end if explicit_end
+
         rule_index = rules.index(rule)
         return nil unless rule_index
 
@@ -104,8 +107,11 @@ module CollieLsp
           return line_for(next_location) - 2 if next_location
         end
 
-        # Last rule - use a default offset
-        line_for(value(rule, :location)) + 10
+        lines.length - 1
+      end
+
+      def find_semicolon_line(lines, start_line)
+        (start_line...lines.length).find { |index| lines[index]&.include?(';') }
       end
 
       # Find block comment ranges
@@ -209,6 +215,25 @@ module CollieLsp
           endLine: end_line,
           kind: kind
         }
+      end
+
+      def stable_non_overlapping_ranges(ranges)
+        selected = []
+
+        ranges
+          .select { |range| range[:endLine] > range[:startLine] }
+          .sort_by { |range| [range[:startLine], range[:endLine]] }
+          .each do |range|
+            next if selected.any? { |existing| overlap?(existing, range) }
+
+            selected << range
+          end
+
+        selected
+      end
+
+      def overlap?(left, right)
+        left[:startLine] <= right[:endLine] && right[:startLine] <= left[:endLine]
       end
 
       def rules_from_ast(ast)

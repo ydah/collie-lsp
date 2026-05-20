@@ -26,7 +26,7 @@ module CollieLsp
           return
         end
 
-        symbols = build_document_symbols(index)
+        symbols = build_document_symbols(index, doc[:text])
 
         writer.write(
           id: request[:id],
@@ -37,9 +37,9 @@ module CollieLsp
       # Build document symbols from symbol index or AST.
       # @param source [SymbolIndex, Object] Parsed symbol source
       # @return [Array<Hash>] LSP document symbols
-      def build_document_symbols(source)
+      def build_document_symbols(source, text = nil)
         index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
-        index.all_symbols.map { |entry| create_symbol_from_entry(entry) }
+        index.all_symbols.map { |entry| create_symbol_from_entry(entry, text: text) }
       end
 
       # Build token symbols
@@ -115,13 +115,17 @@ module CollieLsp
         symbol
       end
 
-      def create_symbol_from_entry(entry)
-        create_symbol(
+      def create_symbol_from_entry(entry, text: nil)
+        range = Support.document_symbol_range(entry[:location], entry[:name], text: text)
+        symbol = create_symbol(
           name: entry[:name],
           kind: symbol_kind(entry[:kind]),
           location: entry[:location],
           detail: entry[:detail]
         )
+        symbol[:range] = range
+        symbol[:selectionRange] = range
+        symbol
       end
 
       def symbol_kind(kind)

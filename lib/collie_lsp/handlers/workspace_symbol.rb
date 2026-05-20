@@ -34,7 +34,7 @@ module CollieLsp
           next unless index
 
           open_uris << uri
-          symbols.concat(search_in_document(query, uri, index))
+          symbols.concat(search_in_document(query, uri, index, text: doc[:text]))
         end
 
         symbols.concat(search_workspace_files(query, collie, open_uris)) if collie
@@ -52,7 +52,7 @@ module CollieLsp
           next [] unless result.ast
 
           text = File.read(path)
-          search_in_document(query, uri, SymbolIndex.build(result.ast, text))
+          search_in_document(query, uri, SymbolIndex.build(result.ast, text), text: text)
         rescue StandardError
           []
         end
@@ -63,7 +63,7 @@ module CollieLsp
       # @param uri [String] Document URI
       # @param source [SymbolIndex, Object] Parsed symbol source
       # @return [Array<Hash>] Matching symbols
-      def search_in_document(query, uri, source)
+      def search_in_document(query, uri, source, text: nil)
         index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
         index.all_symbols.filter_map do |entry|
           next unless matches_query?(entry[:name], query)
@@ -73,7 +73,8 @@ module CollieLsp
             kind: symbol_kind(entry[:kind]),
             uri: uri,
             location: entry[:location],
-            container_name: container_name(entry[:kind])
+            container_name: container_name(entry[:kind]),
+            text: text
           )
         end
       end
@@ -119,8 +120,8 @@ module CollieLsp
       # @param location [Hash] Symbol location
       # @param container_name [String] Container name
       # @return [Hash] LSP symbol information
-      def create_symbol_info(name:, kind:, uri:, location:, container_name: nil)
-        lsp_location = Support.location_to_lsp(uri, location)
+      def create_symbol_info(name:, kind:, uri:, location:, container_name: nil, text: nil)
+        lsp_location = Support.location_to_lsp(uri, location, text: text)
 
         info = {
           name: name,

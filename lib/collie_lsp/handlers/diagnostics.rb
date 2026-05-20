@@ -12,11 +12,10 @@ module CollieLsp
       # @param document_store [DocumentStore] Document store
       # @param writer [Object] Response writer
       def publish(uri, offenses, document_store, writer)
-        diagnostics = offenses.map do |offense|
-          offense_to_diagnostic(offense)
-        end
-
         doc = document_store.get(uri)
+        diagnostics = offenses.map do |offense|
+          offense_to_diagnostic(offense, text: doc&.dig(:text))
+        end
         document_store.update_diagnostics(uri, diagnostics)
 
         params = {
@@ -31,18 +30,13 @@ module CollieLsp
       # Convert a Collie offense to an LSP diagnostic
       # @param offense [Hash] Collie offense
       # @return [Hash] LSP diagnostic
-      def offense_to_diagnostic(offense)
+      def offense_to_diagnostic(offense = nil, text: nil, **keywords)
+        offense ||= keywords
         location = offense[:location] || { line: 1, column: 1 }
-        line = location[:line] - 1 # LSP is 0-indexed
-        column = location[:column] - 1
-
         length = offense[:length].to_i.positive? ? offense[:length].to_i : 1
 
         {
-          range: {
-            start: { line: line, character: column },
-            end: { line: line, character: column + length }
-          },
+          range: Position.location_to_range(location.merge(length: length), text: text),
           severity: severity_to_lsp(offense[:severity]),
           code: offense[:rule_name] || 'unknown',
           source: 'collie',

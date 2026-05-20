@@ -138,17 +138,7 @@ module CollieLsp
     end
 
     def position_to_offset(text, position)
-      line = position[:line]
-      character = position[:character]
-      offset = 0
-
-      text.lines.each_with_index do |line_text, index|
-        return offset + [character, line_text.length].min if index == line
-
-        offset += line_text.length
-      end
-
-      offset
+      Position.position_to_offset(text, position)
     end
   end
 end

@@ -135,5 +135,23 @@ RSpec.describe CollieLsp::DocumentStore do
 
       expect(store.get(uri)[:text]).to eq("first\nchanged\n")
     end
+
+    it 'applies UTF-16 range changes' do
+      store.change(uri, "😀TOKEN\n", 2)
+
+      store.change(
+        uri,
+        [{
+          range: {
+            start: { line: 0, character: 2 },
+            end: { line: 0, character: 7 }
+          },
+          text: 'VALUE'
+        }],
+        3
+      )
+
+      expect(store.get(uri)[:text]).to eq("😀VALUE\n")
+    end
   end
 end

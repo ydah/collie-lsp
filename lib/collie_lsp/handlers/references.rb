@@ -34,7 +34,7 @@ module CollieLsp
           return
         end
 
-        locations = find_references(index, symbol, uri, include_declaration)
+        locations = find_references(index, symbol, uri, include_declaration, text: doc[:text])
 
         writer.write(
           id: request[:id],
@@ -56,10 +56,10 @@ module CollieLsp
       # @param uri [String] Document URI
       # @param include_declaration [Boolean] Include declaration in results
       # @return [Array<Hash>] LSP locations
-      def find_references(source, symbol, uri, include_declaration)
+      def find_references(source, symbol, uri, include_declaration, text: nil)
         index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
         index.references_for(symbol, include_declaration: include_declaration).map do |entry|
-          Support.location_to_lsp(uri, entry[:location])
+          Support.location_to_lsp(uri, entry[:location], text: text)
         end
       end
 

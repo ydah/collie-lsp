@@ -98,18 +98,8 @@ module CollieLsp
 
         edits = occurrences.map do |entry|
           loc = entry[:location]
-          length = loc[:length].to_i.positive? ? loc[:length].to_i : entry[:name].length
           {
-            range: {
-              start: {
-                line: loc[:line] - 1,
-                character: loc[:column] - 1
-              },
-              end: {
-                line: loc[:line] - 1,
-                character: loc[:column] + length - 1
-              }
-            },
+            range: Position.location_to_range(loc, text: text, fallback_length: entry[:name].length),
             newText: rename_text(entry, new_name)
           }
         end

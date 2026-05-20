@@ -20,6 +20,11 @@ module CollieLsp
                 save: { includeText: true }
               },
               documentFormattingProvider: true,
+              documentRangeFormattingProvider: true,
+              documentOnTypeFormattingProvider: {
+                firstTriggerCharacter: ';',
+                moreTriggerCharacter: ['|', "\n"]
+              },
               codeActionProvider: true,
               hoverProvider: true,
               completionProvider: {

@@ -120,7 +120,7 @@ module CollieLsp
         end
 
         # Convert to LSP format (delta encoding)
-        encode_tokens(tokens)
+        encode_tokens(tokens.map { |token| encode_token_position(token, lines[token[:line]]) })
       end
 
       # Build symbol information from AST
@@ -339,6 +339,16 @@ module CollieLsp
         end
 
         encoded
+      end
+
+      def encode_token_position(token, line)
+        start_char = Position.codepoint_to_utf16(line, token[:startChar])
+        token_text = line[token[:startChar], token[:length]].to_s
+
+        token.merge(
+          startChar: start_char,
+          length: Position.codepoint_length_to_utf16(token_text)
+        )
       end
 
       def result_id_for(doc, tokens)
