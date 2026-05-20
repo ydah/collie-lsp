@@ -58,6 +58,27 @@ module CollieLsp
       offset
     end
 
+    def range_to_offsets(text, range)
+      [
+        position_to_offset(text, range[:start]),
+        position_to_offset(text, range[:end])
+      ]
+    end
+
+    def text_for_range(text, range)
+      start_offset, end_offset = range_to_offsets(text, range)
+      text[start_offset...end_offset].to_s
+    end
+
+    def contains?(range, position)
+      starts_before = range[:start][:line] < position[:line] ||
+        (range[:start][:line] == position[:line] && range[:start][:character] <= position[:character])
+      ends_after = range[:end][:line] > position[:line] ||
+        (range[:end][:line] == position[:line] && range[:end][:character] >= position[:character])
+
+      starts_before && ends_after
+    end
+
     def utf16_units(char)
       char.ord > 0xFFFF ? 2 : 1
     end

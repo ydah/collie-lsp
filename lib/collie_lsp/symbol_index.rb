@@ -85,6 +85,12 @@ module CollieLsp
       unique_by_location(definitions_matching(name) + references_matching(name))
     end
 
+    def occurrence_at(name, position)
+      all_occurrences(name).find do |entry|
+        location_contains_position?(entry[:location], position)
+      end
+    end
+
     def entries_by_kind(*kinds)
       @entries.select { |entry| kinds.include?(entry[:kind]) }
     end
@@ -532,13 +538,7 @@ module CollieLsp
     def location_contains_position?(location, position)
       return false unless location
 
-      line = location[:line] - 1
-      start_character = location[:column] - 1
-      length = location[:length].to_i.positive? ? location[:length].to_i : 1
-
-      position[:line] == line &&
-        position[:character] >= start_character &&
-        position[:character] <= start_character + length
+      Position.contains?(Position.location_to_range(location, text: @text), position)
     end
   end
 end

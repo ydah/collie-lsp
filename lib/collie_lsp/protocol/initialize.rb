@@ -33,7 +33,9 @@ module CollieLsp
               definitionProvider: true,
               referencesProvider: true,
               documentSymbolProvider: true,
-              renameProvider: true,
+              renameProvider: {
+                prepareProvider: true
+              },
               semanticTokensProvider: {
                 legend: {
                   tokenTypes: Handlers::SemanticTokens::TOKEN_TYPES,

@@ -29,7 +29,7 @@ module CollieLsp
         end
 
         symbol = Support.symbol_at(doc, position)
-        unless symbol
+        unless symbol && renamable_at?(index, symbol, position)
           writer.write(id: request[:id], result: nil)
           return
         end
@@ -46,6 +46,35 @@ module CollieLsp
         writer.write(
           id: request[:id],
           result: workspace_edit
+        )
+      end
+
+      # Handle textDocument/prepareRename request.
+      def prepare(request, document_store, _collie, writer)
+        uri = request[:params][:textDocument][:uri]
+        position = request[:params][:position]
+        doc = document_store.get(uri)
+
+        unless doc
+          writer.write(id: request[:id], result: nil)
+          return
+        end
+
+        index = Support.symbol_index_for(doc)
+        symbol = index && Support.symbol_at(doc, position)
+        occurrence = symbol && index.occurrence_at(symbol, position)
+
+        unless occurrence && valid_rename_target?(symbol)
+          writer.write(id: request[:id], result: nil)
+          return
+        end
+
+        writer.write(
+          id: request[:id],
+          result: {
+            range: Position.location_to_range(occurrence[:location], text: doc[:text], fallback_length: occurrence[:name].length),
+            placeholder: symbol.delete_prefix('$')
+          }
         )
       end
 
@@ -68,7 +97,9 @@ module CollieLsp
 
         index = ast.is_a?(SymbolIndex) ? ast : SymbolIndex.build(ast, '')
         entry = index.definition_for(old_name)
-        old_name = old_name.delete_prefix('$') if old_name.start_with?('$')
+        normalized_old_name = old_name.delete_prefix('$')
+        normalized_new_name = new_name.delete_prefix('$')
+        return false if name_conflict?(index, normalized_old_name, normalized_new_name)
 
         # Check if old symbol is a token (should be UPPER_CASE)
         is_token = entry&.dig(:kind) == :token
@@ -81,7 +112,7 @@ module CollieLsp
                     /^[a-z][a-z0-9_]*$/
                   end
 
-        !!(new_name =~ pattern)
+        !!(normalized_new_name =~ pattern)
       end
 
       # Build workspace edit with all rename changes
@@ -113,6 +144,21 @@ module CollieLsp
 
       def rename_text(entry, new_name)
         entry[:name].start_with?('$') ? "$#{new_name.delete_prefix('$')}" : new_name.delete_prefix('$')
+      end
+
+      def renamable_at?(index, symbol, position)
+        valid_rename_target?(symbol) && index.occurrence_at(symbol, position)
+      end
+
+      def valid_rename_target?(symbol)
+        !symbol.match?(/\A\$\d+\z/) && symbol != '$$'
+      end
+
+      def name_conflict?(index, old_name, new_name)
+        return false if old_name == new_name
+
+        existing = index.definition_for(new_name)
+        existing && existing[:kind] != :named_reference
       end
 
       # Find all occurrences of a symbol in the document

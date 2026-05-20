@@ -88,6 +88,8 @@ module CollieLsp
         Handlers::DocumentSymbol.handle(request, @document_store, @collie, @writer)
       when 'textDocument/rename'
         Handlers::Rename.handle(request, @document_store, @collie, @writer)
+      when 'textDocument/prepareRename'
+        Handlers::Rename.prepare(request, @document_store, @collie, @writer)
       when 'textDocument/semanticTokens/full'
         Handlers::SemanticTokens.handle(request, @document_store, @collie, @writer)
       when 'textDocument/semanticTokens/full/delta'

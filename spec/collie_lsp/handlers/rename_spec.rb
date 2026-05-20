@@ -64,6 +64,49 @@ RSpec.describe CollieLsp::Handlers::Rename do
         described_class.handle(request, document_store, nil, writer)
       end
     end
+
+    context 'when position is not a grammar occurrence' do
+      let(:text) { "// TOKEN_NAME\n%token TOKEN_NAME" }
+      let(:ast) do
+        {
+          declarations: [{
+            kind: :token,
+            names: ['TOKEN_NAME'],
+            location: { line: 2, column: 8 }
+          }],
+          rules: []
+        }
+      end
+      let(:document_store) { test_document_store(uri: uri, text: text, ast: ast) }
+
+      it 'does not rename comment text' do
+        expect(writer).to receive(:write).with(id: 1, result: nil)
+
+        described_class.handle(request, document_store, nil, writer)
+      end
+    end
+  end
+
+  describe '.prepare' do
+    let(:text) { '%token TOKEN_NAME' }
+    let(:ast) { mock_ast(tokens: ['TOKEN_NAME']) }
+    let(:document_store) { test_document_store(uri: uri, text: text, ast: ast) }
+
+    it 'returns the rename range and placeholder' do
+      request = {
+        id: 1,
+        params: {
+          textDocument: { uri: uri },
+          position: { line: 0, character: 10 }
+        }
+      }
+
+      expect(writer).to receive(:write) do |message|
+        expect(message[:result]).to include(placeholder: 'TOKEN_NAME')
+      end
+
+      described_class.prepare(request, document_store, nil, writer)
+    end
   end
 
   describe '.valid_name?' do
@@ -81,6 +124,10 @@ RSpec.describe CollieLsp::Handlers::Rename do
 
     it 'rejects empty names' do
       expect(described_class.valid_name?('TOKEN', '', ast)).to be false
+    end
+
+    it 'rejects existing symbol names' do
+      expect(described_class.valid_name?('TOKEN', 'rule', ast)).to be false
     end
   end
 

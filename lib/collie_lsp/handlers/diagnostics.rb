@@ -40,8 +40,16 @@ module CollieLsp
           severity: severity_to_lsp(offense[:severity]),
           code: offense[:rule_name] || 'unknown',
           source: 'collie',
-          message: offense[:message] || 'Unknown error'
+          message: offense[:message] || 'Unknown error',
+          data: {
+            rule_name: offense[:rule_name] || 'unknown',
+            autocorrect: autocorrectable?(offense[:rule_name])
+          }
         }
+      end
+
+      def autocorrectable?(rule_name)
+        %w[TrailingWhitespace TokenNaming NonterminalNaming UndefinedSymbol MissingStartSymbol].include?(rule_name)
       end
 
       # Convert Collie severity to LSP severity
