@@ -102,6 +102,26 @@ RSpec.describe CollieLsp::Server do
 
         expect(server.instance_variable_get(:@cancelled_request_ids)).to include(99 => true)
       end
+
+      it 'updates workspace folders when notified' do
+        collie = CollieLsp::CollieWrapper.new(workspace_roots: ['/old'])
+        server.instance_variable_set(:@initialized, true)
+        server.instance_variable_set(:@collie, collie)
+        expect(writer).to receive(:write).with(hash_including(method: 'window/logMessage'))
+
+        server.send(
+          :handle_request,
+          method: 'workspace/didChangeWorkspaceFolders',
+          params: {
+            event: {
+              added: [{ uri: 'file:///new', name: 'new' }],
+              removed: [{ uri: 'file:///old', name: 'old' }]
+            }
+          }
+        )
+
+        expect(collie.workspace_roots).to eq(['/new'])
+      end
     end
   end
 end

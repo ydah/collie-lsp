@@ -93,30 +93,41 @@ module CollieLsp
         previous = doc[:semantic_tokens]
         document_store.update_semantic_tokens(uri, result_id: result_id, data: tokens)
 
-        edits = if previous && previous[:result_id] == previous_result_id && previous[:data] == tokens
-                  []
-                else
-                  [{
-                    start: 0,
-                    deleteCount: previous&.dig(:data)&.size || 0,
-                    data: tokens
-                  }]
-                end
+        edits = semantic_token_edits(previous, previous_result_id, tokens)
 
         writer.write(id: request[:id], result: { resultId: result_id, edits: edits })
+      end
+
+      # Handle textDocument/semanticTokens/range request.
+      def handle_range(request, document_store, _collie, writer)
+        uri = request[:params][:textDocument][:uri]
+        range = request[:params][:range]
+        doc = document_store.get(uri)
+
+        unless doc
+          writer.write(id: request[:id], result: { data: [] })
+          return
+        end
+
+        tokens = build_semantic_tokens(doc[:text], Support.symbol_index_for(doc), range: range)
+        writer.write(id: request[:id], result: { data: tokens })
       end
 
       # Build semantic tokens array
       # @param text [String] Document text
       # @param source [SymbolIndex, Object, nil] Parsed symbol source
       # @return [Array<Integer>] Encoded semantic tokens
-      def build_semantic_tokens(text, source)
+      def build_semantic_tokens(text, source, range: nil)
         tokens = []
         symbol_info = build_symbol_info(source)
 
         lines = text.lines
+        in_block_comment = false
         lines.each_with_index do |line, line_idx|
-          tokens.concat(tokenize_line(line, line_idx, symbol_info))
+          next if range && (line_idx < range[:start][:line] || line_idx > range[:end][:line])
+
+          line_tokens, in_block_comment = tokenize_line(line, line_idx, symbol_info, in_block_comment: in_block_comment)
+          tokens.concat(line_tokens)
         end
 
         # Convert to LSP format (delta encoding)
@@ -148,11 +159,22 @@ module CollieLsp
       # @param line_idx [Integer] Line index
       # @param symbol_info [Hash] Symbol information
       # @return [Array<Hash>] Tokens in this line
-      def tokenize_line(line, line_idx, symbol_info)
+      def tokenize_line(line, line_idx, symbol_info, in_block_comment: false)
         tokens = []
         pos = 0
 
         while pos < line.length
+          if in_block_comment
+            end_pos = line.index('*/', pos)
+            length = end_pos ? end_pos + 2 - pos : line.length - pos
+            tokens << create_token(line_idx, pos, length, :comment)
+            return [tokens, true] unless end_pos
+
+            pos = end_pos + 2
+            in_block_comment = false
+            next
+          end
+
           # Skip whitespace
           if line[pos] =~ /\s/
             pos += 1
@@ -177,13 +199,15 @@ module CollieLsp
           end
 
           if line[pos..(pos + 1)] == '/*'
-            # Block comment (simplified - doesn't handle multi-line)
             end_pos = line.index('*/', pos + 2)
             if end_pos
               tokens << create_token(line_idx, pos, end_pos + 2 - pos, :comment)
               pos = end_pos + 2
               next
             end
+
+            tokens << create_token(line_idx, pos, line.length - pos, :comment)
+            return [tokens, true]
           end
 
           # Check for strings
@@ -238,7 +262,7 @@ module CollieLsp
           pos += 1
         end
 
-        tokens
+        [tokens, in_block_comment]
       end
 
       # Extract keyword from position
@@ -354,6 +378,48 @@ module CollieLsp
       def result_id_for(doc, tokens)
         digest = Digest::SHA256.hexdigest(tokens.join(','))
         "#{doc[:version]}-#{digest[0, 12]}"
+      end
+
+      def semantic_token_edits(previous, previous_result_id, tokens)
+        return full_semantic_token_edit(previous, tokens) unless previous && previous[:result_id] == previous_result_id
+        return [] if previous[:data] == tokens
+
+        minimal_semantic_token_edit(previous[:data], tokens)
+      end
+
+      def full_semantic_token_edit(previous, tokens)
+        [{
+          start: 0,
+          deleteCount: previous&.dig(:data)&.size || 0,
+          data: tokens
+        }]
+      end
+
+      def minimal_semantic_token_edit(old_data, new_data)
+        prefix = common_prefix_length(old_data, new_data)
+        suffix = common_suffix_length(old_data, new_data, prefix)
+        delete_count = old_data.length - prefix - suffix
+        data = new_data[prefix...(new_data.length - suffix)]
+
+        [{
+          start: prefix,
+          deleteCount: delete_count,
+          data: data || []
+        }]
+      end
+
+      def common_prefix_length(left, right)
+        max = [left.length, right.length].min
+        index = 0
+        index += 1 while index < max && left[index] == right[index]
+        index
+      end
+
+      def common_suffix_length(left, right, prefix)
+        max = [left.length, right.length].min - prefix
+        index = 0
+        index += 1 while index < max && left[-index - 1] == right[-index - 1]
+        index
       end
     end
   end

@@ -102,6 +102,42 @@ RSpec.describe CollieLsp::Handlers::SemanticTokens do
     end
   end
 
+  describe '.handle_range' do
+    let(:request) do
+      {
+        id: 1,
+        params: {
+          textDocument: { uri: uri },
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 20 }
+          }
+        }
+      }
+    end
+    let(:document_store) { test_document_store(uri: uri, text: "%token IDENTIFIER\n%%\nexpr: IDENTIFIER;\n") }
+
+    it 'returns range semantic tokens' do
+      expect(writer).to receive(:write) do |args|
+        expect(args[:result]).to include(data: kind_of(Array))
+      end
+
+      described_class.handle_range(request, document_store, nil, writer)
+    end
+  end
+
+  describe '.semantic_token_edits' do
+    it 'returns a minimal edit when previous result matches' do
+      edits = described_class.semantic_token_edits(
+        { result_id: '1', data: [1, 2, 3, 4] },
+        '1',
+        [1, 2, 9, 4]
+      )
+
+      expect(edits).to eq([{ start: 2, deleteCount: 1, data: [9] }])
+    end
+  end
+
   describe 'TOKEN_TYPES and TOKEN_MODIFIERS' do
     it 'defines token types' do
       expect(described_class::TOKEN_TYPES).to be_an(Array)

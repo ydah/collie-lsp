@@ -19,6 +19,14 @@ module CollieLsp
 
     attr_reader :workspace_roots
 
+    def update_workspace_roots(added: [], removed: [])
+      removed_paths = removed.map { |root| File.expand_path(root) }
+      @workspace_roots = workspace_roots.reject { |root| removed_paths.include?(File.expand_path(root)) }
+      @workspace_roots.concat(added)
+      @workspace_roots = @workspace_roots.compact.uniq
+      reload_config!
+    end
+
     # Parse grammar source into AST
     # @param source [String] Grammar source code
     # @param filename [String] Filename for error messages

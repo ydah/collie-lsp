@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tmpdir'
 
 RSpec.describe CollieLsp::Handlers::Rename do
   let(:writer) { mock_writer }
@@ -171,6 +172,32 @@ RSpec.describe CollieLsp::Handlers::Rename do
       new_texts = edit[:changes][uri].map { |entry| entry[:newText] }
 
       expect(new_texts).to contain_exactly('value', '$value')
+    end
+
+    it 'renames occurrences in unopened workspace files' do
+      Dir.mktmpdir do |dir|
+        closed_path = File.join(dir, 'closed.y')
+        File.write(closed_path, "%token OLD_NAME\n%%\nother: OLD_NAME;\n%%\n")
+        collie = CollieLsp::CollieWrapper.new(workspace_root: dir)
+        store = test_document_store(
+          uri: uri,
+          text: "%token OLD_NAME\n%%\nexpr: OLD_NAME;\n%%\n",
+          ast: CollieLsp::CollieWrapper.new.parse("%token OLD_NAME\n%%\nexpr: OLD_NAME;\n%%\n")
+        )
+        index = CollieLsp::SymbolIndex.build(store.get(uri)[:ast], store.get(uri)[:text])
+
+        edit = described_class.build_workspace_edit(
+          uri,
+          'OLD_NAME',
+          'NEW_NAME',
+          store.get(uri)[:text],
+          index,
+          document_store: store,
+          collie: collie
+        )
+
+        expect(edit[:changes].keys).to include(uri, CollieLsp::UriUtils.file_uri(closed_path))
+      end
     end
   end
 end

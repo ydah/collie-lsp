@@ -66,19 +66,19 @@ module CollieLsp
 
         {
           kind: 'markdown',
-          value: hover_value(entry)
+          value: hover_value(entry, index)
         }
       end
 
-      def hover_value(entry)
+      def hover_value(entry, index = nil)
         case entry[:kind]
         when :token
-          "**Token**: `#{entry[:name]}`\n\nType: `#{entry[:type_tag] || 'none'}`"
+          "**Token**: `#{entry[:name]}`\n\nType: `#{entry[:type_tag] || 'none'}`\n\nUses: #{index&.usage_count(entry[:name]) || 0}"
         when :rule
-          "**Nonterminal**: `#{entry[:name]}`\n\n#{entry[:detail]}"
+          rule_hover(entry, index)
         when :parameterized_rule
           parameters = Array(entry[:parameters]).join(', ')
-          "**Parameterized rule**: `#{entry[:name]}`\n\nParameters: `#{parameters}`"
+          "**Parameterized rule**: `#{entry[:name]}`\n\nParameters: `#{parameters}`\n\n#{production_details(entry, index)}"
         when :inline_rule
           "**Inline rule**: `#{entry[:name]}`"
         when :type
@@ -92,6 +92,23 @@ module CollieLsp
         else
           "**Symbol**: `#{entry[:name]}`"
         end
+      end
+
+      def rule_hover(entry, index)
+        "**Nonterminal**: `#{entry[:name]}`\n\n#{entry[:detail]}\n\n#{production_details(entry, index)}"
+      end
+
+      def production_details(entry, index)
+        return 'Uses: 0' unless index
+
+        productions = index.productions_for(entry[:name]).first(5)
+        details = []
+        details << "Uses: #{index.usage_count(entry[:name])}"
+        details << "Nullable: #{index.nullable?(entry[:name]) ? 'yes' : 'no'}"
+        first = index.first_set(entry[:name])
+        details << "FIRST: `#{first.join('`, `')}`" unless first.empty?
+        details << "Productions:\n#{productions.map { |production| "- `#{production}`" }.join("\n")}" unless productions.empty?
+        details.join("\n\n")
       end
     end
   end

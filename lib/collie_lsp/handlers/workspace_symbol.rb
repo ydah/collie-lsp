@@ -27,35 +27,12 @@ module CollieLsp
       # @return [Array<Hash>] Matching symbols
       def search_symbols(query, document_store, collie = nil)
         symbols = []
-        open_uris = []
-
-        document_store.each_document do |uri, doc|
-          index = Support.symbol_index_for(doc)
-          next unless index
-
-          open_uris << uri
-          symbols.concat(search_in_document(query, uri, index, text: doc[:text]))
+        WorkspaceIndex.each(document_store, collie) do |uri, text, index|
+          symbols.concat(search_in_document(query, uri, index, text: text))
         end
-
-        symbols.concat(search_workspace_files(query, collie, open_uris)) if collie
 
         # Sort by relevance (exact matches first, then contains)
         symbols.sort_by { |s| symbol_relevance(s[:name], query) }
-      end
-
-      def search_workspace_files(query, collie, open_uris)
-        collie.workspace_grammar_files.flat_map do |path|
-          uri = UriUtils.file_uri(path)
-          next [] if open_uris.include?(uri)
-
-          result = collie.parse_file(path)
-          next [] unless result.ast
-
-          text = File.read(path)
-          search_in_document(query, uri, SymbolIndex.build(result.ast, text), text: text)
-        rescue StandardError
-          []
-        end
       end
 
       # Search for symbols in a single document

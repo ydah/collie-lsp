@@ -9,9 +9,9 @@ module CollieLsp
       # Handle textDocument/references request
       # @param request [Hash] LSP request
       # @param document_store [DocumentStore] Document store
-      # @param _collie [CollieWrapper] Collie wrapper (unused)
+      # @param collie [CollieWrapper] Collie wrapper
       # @param writer [Object] Response writer
-      def handle(request, document_store, _collie, writer)
+      def handle(request, document_store, collie, writer)
         uri = request[:params][:textDocument][:uri]
         position = request[:params][:position]
         include_declaration = request[:params][:context][:includeDeclaration]
@@ -34,7 +34,7 @@ module CollieLsp
           return
         end
 
-        locations = find_references(index, symbol, uri, include_declaration, text: doc[:text])
+        locations = find_workspace_references(document_store, collie, symbol, include_declaration)
 
         writer.write(
           id: request[:id],
@@ -61,6 +61,14 @@ module CollieLsp
         index.references_for(symbol, include_declaration: include_declaration).map do |entry|
           Support.location_to_lsp(uri, entry[:location], text: text)
         end
+      end
+
+      def find_workspace_references(document_store, collie, symbol, include_declaration)
+        locations = []
+        WorkspaceIndex.each(document_store, collie) do |uri, text, index|
+          locations.concat(find_references(index, symbol, uri, include_declaration, text: text))
+        end
+        locations
       end
 
       # Find declaration location for a symbol

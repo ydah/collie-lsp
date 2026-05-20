@@ -111,6 +111,27 @@ module CollieLsp
       @entries.filter_map { |entry| entry[:type_tag] }.uniq
     end
 
+    def usage_count(name)
+      references_matching(name).size
+    end
+
+    def productions_for(name)
+      rules_from_ast.select { |rule| value(rule, :name) == name }.flat_map do |rule|
+        Array(value(rule, :alternatives)).map do |alternative|
+          symbols = Array(value(alternative, :symbols)).map { |symbol| value(symbol, :name) }
+          symbols.empty? ? '/* empty */' : symbols.join(' ')
+        end
+      end
+    end
+
+    def nullable?(name)
+      productions_for(name).any? { |production| production == '/* empty */' }
+    end
+
+    def first_set(name)
+      productions_for(name).filter_map { |production| production.split.first unless production == '/* empty */' }.uniq
+    end
+
     private
 
     def build

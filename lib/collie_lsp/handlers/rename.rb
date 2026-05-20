@@ -9,9 +9,9 @@ module CollieLsp
       # Handle textDocument/rename request
       # @param request [Hash] LSP request
       # @param document_store [DocumentStore] Document store
-      # @param _collie [CollieWrapper] Collie wrapper (unused)
+      # @param collie [CollieWrapper] Collie wrapper
       # @param writer [Object] Response writer
-      def handle(request, document_store, _collie, writer)
+      def handle(request, document_store, collie, writer)
         uri = request[:params][:textDocument][:uri]
         position = request[:params][:position]
         new_name = request[:params][:newName]
@@ -41,7 +41,7 @@ module CollieLsp
         end
 
         # Build workspace edit with all occurrences
-        workspace_edit = build_workspace_edit(uri, symbol, new_name, doc[:text], index)
+        workspace_edit = build_workspace_edit(uri, symbol, new_name, doc[:text], index, document_store: document_store, collie: collie)
 
         writer.write(
           id: request[:id],
@@ -122,24 +122,34 @@ module CollieLsp
       # @param text [String] Document text
       # @param ast [Hash] Parsed AST
       # @return [Hash] LSP workspace edit
-      def build_workspace_edit(uri, old_name, new_name, text, ast)
-        # Find all occurrences of the symbol
-        index = ast.is_a?(SymbolIndex) ? ast : SymbolIndex.build(ast, text)
-        occurrences = index.all_occurrences(old_name)
+      def build_workspace_edit(uri, old_name, new_name, text, ast, document_store: nil, collie: nil)
+        return single_document_edit(uri, old_name, new_name, text, ast) unless document_store && collie
 
-        edits = occurrences.map do |entry|
-          loc = entry[:location]
+        changes = {}
+        WorkspaceIndex.each(document_store, collie) do |doc_uri, doc_text, index|
+          edits = rename_edits(old_name, new_name, doc_text, index)
+          changes[doc_uri] = edits unless edits.empty?
+        end
+
+        { changes: changes }
+      end
+
+      def single_document_edit(uri, old_name, new_name, text, ast)
+        index = ast.is_a?(SymbolIndex) ? ast : SymbolIndex.build(ast, text)
+        {
+          changes: {
+            uri => rename_edits(old_name, new_name, text, index)
+          }
+        }
+      end
+
+      def rename_edits(old_name, new_name, text, index)
+        index.all_occurrences(old_name).map do |entry|
           {
-            range: Position.location_to_range(loc, text: text, fallback_length: entry[:name].length),
+            range: Position.location_to_range(entry[:location], text: text, fallback_length: entry[:name].length),
             newText: rename_text(entry, new_name)
           }
         end
-
-        {
-          changes: {
-            uri => edits
-          }
-        }
       end
 
       def rename_text(entry, new_name)

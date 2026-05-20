@@ -28,7 +28,8 @@ module CollieLsp
               codeActionProvider: true,
               hoverProvider: true,
               completionProvider: {
-                triggerCharacters: ['%', '$']
+                triggerCharacters: ['%', '$', '<', '[', '('],
+                resolveProvider: true
               },
               definitionProvider: true,
               referencesProvider: true,
@@ -43,7 +44,8 @@ module CollieLsp
                 },
                 full: {
                   delta: true
-                }
+                },
+                range: true
               },
               workspaceSymbolProvider: true,
               foldingRangeProvider: true,

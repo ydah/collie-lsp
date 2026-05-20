@@ -75,4 +75,33 @@ RSpec.describe CollieLsp::Handlers::Completion do
       )
     end
   end
+
+  describe '.completions_for_context' do
+    let(:source) do
+      <<~GRAMMAR
+        %token <node> IDENTIFIER
+        %%
+        expr: IDENTIFIER[name] { $$ = $name; };
+      GRAMMAR
+    end
+    let(:index) { CollieLsp::SymbolIndex.build(CollieLsp::CollieWrapper.new.parse(source), source) }
+
+    it 'suppresses completions inside comments' do
+      completions = described_class.completions_for_context('// %', { line: 0, character: 4 }, index)
+
+      expect(completions).to be_empty
+    end
+
+    it 'returns type tag completions inside type tags' do
+      completions = described_class.completions_for_context('%type <n', { line: 0, character: 8 }, index)
+
+      expect(completions).to include(hash_including(label: 'node'))
+    end
+
+    it 'returns action reference completions after dollar triggers' do
+      completions = described_class.completions_for_context('$', { line: 0, character: 1 }, index)
+
+      expect(completions).to include(hash_including(label: '$name'))
+    end
+  end
 end

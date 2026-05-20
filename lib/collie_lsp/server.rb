@@ -9,6 +9,7 @@ module CollieLsp
     INVALID_REQUEST = -32_600
     METHOD_NOT_FOUND = -32_601
     INTERNAL_ERROR = -32_603
+    REQUEST_CANCELLED = -32_800
 
     INITIALIZATION_METHODS = %w[initialize exit].freeze
     POST_SHUTDOWN_METHODS = %w[exit].freeze
@@ -20,6 +21,7 @@ module CollieLsp
       textDocument/didClose
       workspace/didChangeConfiguration
       workspace/didChangeWatchedFiles
+      workspace/didChangeWorkspaceFolders
       $/cancelRequest
       exit
     ].freeze
@@ -54,6 +56,7 @@ module CollieLsp
       return handle_cancel_request(request) if request[:method] == '$/cancelRequest'
       return reject_uninitialized(request) unless initialized_request_allowed?(request)
       return reject_after_shutdown(request) unless post_shutdown_request_allowed?(request)
+      return write_error(request, REQUEST_CANCELLED, 'Request cancelled') if cancelled?(request)
 
       case request[:method]
       when 'initialize'
@@ -80,6 +83,8 @@ module CollieLsp
         Handlers::Hover.handle(request, @document_store, @collie, @writer)
       when 'textDocument/completion'
         Handlers::Completion.handle(request, @document_store, @collie, @writer)
+      when 'completionItem/resolve'
+        Handlers::Completion.resolve(request, @document_store, @collie, @writer)
       when 'textDocument/definition'
         Handlers::Definition.handle(request, @document_store, @collie, @writer)
       when 'textDocument/references'
@@ -94,10 +99,14 @@ module CollieLsp
         Handlers::SemanticTokens.handle(request, @document_store, @collie, @writer)
       when 'textDocument/semanticTokens/full/delta'
         Handlers::SemanticTokens.handle_delta(request, @document_store, @collie, @writer)
+      when 'textDocument/semanticTokens/range'
+        Handlers::SemanticTokens.handle_range(request, @document_store, @collie, @writer)
       when 'workspace/didChangeConfiguration'
         handle_configuration_change
       when 'workspace/didChangeWatchedFiles'
         handle_watched_files_change(request)
+      when 'workspace/didChangeWorkspaceFolders'
+        handle_workspace_folders_change(request)
       when 'workspace/symbol'
         Handlers::WorkspaceSymbol.handle(request, @document_store, @collie, @writer)
       when 'textDocument/foldingRange'
@@ -136,6 +145,22 @@ module CollieLsp
 
       reload_configuration if changes.any? { |change| watched_config?(change[:uri]) }
       republish_open_document_diagnostics if changes.any? { |change| watched_config?(change[:uri]) }
+    end
+
+    def handle_workspace_folders_change(request)
+      added = Array(request.dig(:params, :event, :added)).filter_map do |folder|
+        uri = folder[:uri] || folder['uri']
+        UriUtils.path_from_uri(uri) if uri
+      end
+      removed = Array(request.dig(:params, :event, :removed)).filter_map do |folder|
+        uri = folder[:uri] || folder['uri']
+        UriUtils.path_from_uri(uri) if uri
+      end
+
+      @collie&.update_workspace_roots(added: added, removed: removed)
+      @workspace_roots = @collie&.workspace_roots || []
+      @workspace_root = @workspace_roots.first
+      log_message('info', 'collie-lsp workspace folders updated')
     end
 
     # Extract workspace root from initialize request
@@ -179,6 +204,10 @@ module CollieLsp
     def handle_cancel_request(request)
       id = request.dig(:params, :id)
       @cancelled_request_ids[id] = true if id
+    end
+
+    def cancelled?(request)
+      @cancelled_request_ids.delete(request[:id])
     end
 
     def reload_configuration
