@@ -21,13 +21,13 @@ module CollieLsp
           return
         end
 
-        ast = doc[:ast]
-        unless ast
+        index = Support.symbol_index_for(doc)
+        unless index
           writer.write(id: request[:id], result: [])
           return
         end
 
-        completions = build_completions(ast)
+        completions = build_completions(index)
 
         writer.write(
           id: request[:id],
@@ -35,37 +35,48 @@ module CollieLsp
         )
       end
 
-      # Build completion items from AST
-      # @param ast [Hash] Parsed AST
+      # Build completion items from symbol index or AST.
+      # @param source [SymbolIndex, Object] Parsed symbol source
       # @return [Array<Hash>] LSP completion items
-      def build_completions(ast)
-        completions = []
+      def build_completions(source)
+        index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
+        directives + index.all_symbols.filter_map { |entry| completion_for(entry) }
+      end
 
-        # Add all declared tokens
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token
-
-          decl[:names]&.each do |name|
-            completions << {
-              label: name,
-              kind: 14, # Keyword
-              detail: "Token: #{name}",
-              documentation: 'Declared token'
-            }
-          end
-        end
-
-        # Add all nonterminals
-        ast[:rules]&.each do |rule|
-          completions << {
-            label: rule[:name],
-            kind: 7, # Class (nonterminal)
-            detail: "Nonterminal: #{rule[:name]}",
-            documentation: 'Grammar rule'
+      def directives
+        %w[%token %type %left %right %nonassoc %start %union %prec %rule %inline].map do |directive|
+          {
+            label: directive,
+            kind: 14,
+            detail: 'Grammar directive'
           }
         end
+      end
 
-        completions
+      def completion_for(entry)
+        case entry[:kind]
+        when :token
+          completion_item(entry, kind: 14, detail: "Token: #{entry[:name]}", documentation: 'Declared token')
+        when :rule
+          completion_item(entry, kind: 7, detail: "Nonterminal: #{entry[:name]}", documentation: 'Grammar rule')
+        when :parameterized_rule
+          completion_item(entry, kind: 3, detail: "Parameterized rule: #{entry[:name]}", documentation: 'Lrama parameterized rule')
+        when :inline_rule
+          completion_item(entry, kind: 3, detail: "Inline rule: #{entry[:name]}", documentation: 'Lrama inline rule')
+        when :type
+          completion_item(entry, kind: 7, detail: "Type: #{entry[:name]}", documentation: 'Typed nonterminal')
+        else
+          nil
+        end
+      end
+
+      def completion_item(entry, kind:, detail:, documentation:)
+        {
+          label: entry[:name],
+          kind: kind,
+          detail: detail,
+          documentation: documentation
+        }
       end
     end
   end

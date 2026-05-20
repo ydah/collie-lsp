@@ -20,13 +20,13 @@ module CollieLsp
           return
         end
 
-        ast = doc[:ast]
-        unless ast
+        index = Support.symbol_index_for(doc)
+        unless index
           writer.write(id: request[:id], result: [])
           return
         end
 
-        symbols = build_document_symbols(ast)
+        symbols = build_document_symbols(index)
 
         writer.write(
           id: request[:id],
@@ -34,99 +34,40 @@ module CollieLsp
         )
       end
 
-      # Build document symbols from AST
-      # @param ast [Hash] Parsed AST
+      # Build document symbols from symbol index or AST.
+      # @param source [SymbolIndex, Object] Parsed symbol source
       # @return [Array<Hash>] LSP document symbols
-      def build_document_symbols(ast)
-        symbols = []
-
-        symbols.concat(build_token_symbols(ast))
-        symbols.concat(build_type_symbols(ast))
-        symbols.concat(build_precedence_symbols(ast))
-        symbols.concat(build_rule_symbols(ast))
-
-        symbols
+      def build_document_symbols(source)
+        index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
+        index.all_symbols.map { |entry| create_symbol_from_entry(entry) }
       end
 
       # Build token symbols
       # @param ast [Hash] Parsed AST
       # @return [Array<Hash>] Token symbols
       def build_token_symbols(ast)
-        symbols = []
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token && decl[:location]
-
-          decl[:names]&.each do |name|
-            symbols << create_symbol(
-              name: name,
-              kind: 14,
-              location: decl[:location],
-              detail: 'Token'
-            )
-          end
-        end
-        symbols
+        SymbolIndex.build(ast, '').entries_by_kind(:token).map { |entry| create_symbol_from_entry(entry) }
       end
 
       # Build type symbols
       # @param ast [Hash] Parsed AST
       # @return [Array<Hash>] Type symbols
       def build_type_symbols(ast)
-        symbols = []
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :type && decl[:location]
-
-          decl[:names]&.each do |name|
-            symbols << create_symbol(
-              name: name,
-              kind: 7,
-              location: decl[:location],
-              detail: 'Type'
-            )
-          end
-        end
-        symbols
+        SymbolIndex.build(ast, '').entries_by_kind(:type).map { |entry| create_symbol_from_entry(entry) }
       end
 
       # Build precedence symbols
       # @param ast [Hash] Parsed AST
       # @return [Array<Hash>] Precedence symbols
       def build_precedence_symbols(ast)
-        symbols = []
-        ast[:declarations]&.each do |decl|
-          next unless %i[left right nonassoc].include?(decl[:kind]) && decl[:location]
-
-          assoc_name = decl[:kind].to_s.capitalize
-          decl[:tokens]&.each do |token|
-            symbols << create_symbol(
-              name: token,
-              kind: 22,
-              location: decl[:location],
-              detail: "#{assoc_name} precedence"
-            )
-          end
-        end
-        symbols
+        SymbolIndex.build(ast, '').entries_by_kind(:precedence).map { |entry| create_symbol_from_entry(entry) }
       end
 
       # Build rule symbols
       # @param ast [Hash] Parsed AST
       # @return [Array<Hash>] Rule symbols
       def build_rule_symbols(ast)
-        symbols = []
-        ast[:rules]&.each do |rule|
-          next unless rule[:location]
-
-          children = build_rule_children(rule)
-          symbols << create_symbol(
-            name: rule[:name],
-            kind: 12,
-            location: rule[:location],
-            detail: "Grammar rule (#{rule[:alternatives]&.size || 0} alternatives)",
-            children: children
-          )
-        end
-        symbols
+        SymbolIndex.build(ast, '').entries_by_kind(:rule, :parameterized_rule).map { |entry| create_symbol_from_entry(entry) }
       end
 
       # Build children symbols for a rule (alternatives)
@@ -159,26 +100,40 @@ module CollieLsp
       # @param children [Array<Hash>] Child symbols
       # @return [Hash] LSP document symbol
       def create_symbol(name:, kind:, location:, detail: nil, children: nil)
-        line = location[:line] - 1
-        column = location[:column] - 1
+        range = Support.document_symbol_range(location, name)
 
         symbol = {
           name: name,
           kind: kind,
-          range: {
-            start: { line: line, character: column },
-            end: { line: line, character: column + name.length }
-          },
-          selectionRange: {
-            start: { line: line, character: column },
-            end: { line: line, character: column + name.length }
-          }
+          range: range,
+          selectionRange: range
         }
 
         symbol[:detail] = detail if detail
         symbol[:children] = children if children && !children.empty?
 
         symbol
+      end
+
+      def create_symbol_from_entry(entry)
+        create_symbol(
+          name: entry[:name],
+          kind: symbol_kind(entry[:kind]),
+          location: entry[:location],
+          detail: entry[:detail]
+        )
+      end
+
+      def symbol_kind(kind)
+        case kind
+        when :token then 14
+        when :type then 7
+        when :precedence then 22
+        when :rule, :parameterized_rule, :inline_rule then 12
+        when :start then 13
+        when :union then 5
+        else 13
+        end
       end
     end
   end

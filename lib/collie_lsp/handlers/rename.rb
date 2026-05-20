@@ -22,27 +22,26 @@ module CollieLsp
           return
         end
 
-        ast = doc[:ast]
-        unless ast
+        index = Support.symbol_index_for(doc)
+        unless index
           writer.write(id: request[:id], result: nil)
           return
         end
 
-        # Find symbol at position
-        symbol = find_symbol_at_position(doc[:text], position)
+        symbol = Support.symbol_at(doc, position)
         unless symbol
           writer.write(id: request[:id], result: nil)
           return
         end
 
         # Validate new name
-        unless valid_name?(symbol, new_name, ast)
+        unless valid_name?(symbol, new_name, index)
           writer.write(id: request[:id], result: nil)
           return
         end
 
         # Build workspace edit with all occurrences
-        workspace_edit = build_workspace_edit(uri, symbol, new_name, doc[:text], ast)
+        workspace_edit = build_workspace_edit(uri, symbol, new_name, doc[:text], index)
 
         writer.write(
           id: request[:id],
@@ -55,21 +54,7 @@ module CollieLsp
       # @param position [Hash] LSP position
       # @return [String, nil] Symbol name or nil
       def find_symbol_at_position(text, position)
-        lines = text.lines
-        line = lines[position[:line]]
-        return nil unless line
-
-        # Extract word at character position
-        char = position[:character]
-        start_pos = char
-        end_pos = char
-
-        # Move backwards to find word start
-        start_pos -= 1 while start_pos.positive? && line[start_pos - 1] =~ /[A-Za-z0-9_]/
-        # Move forwards to find word end
-        end_pos += 1 while end_pos < line.length && line[end_pos] =~ /[A-Za-z0-9_]/
-
-        line[start_pos...end_pos]
+        SymbolIndex.symbol_at(text, position)
       end
 
       # Validate the new name based on symbol type
@@ -80,10 +65,11 @@ module CollieLsp
       def valid_name?(old_name, new_name, ast)
         return false if new_name.empty?
 
+        index = ast.is_a?(SymbolIndex) ? ast : SymbolIndex.build(ast, '')
+        entry = index.definition_for(old_name)
+
         # Check if old symbol is a token (should be UPPER_CASE)
-        is_token = ast[:declarations]&.any? do |decl|
-          decl[:kind] == :token && decl[:names]&.include?(old_name)
-        end
+        is_token = entry&.dig(:kind) == :token
 
         pattern = if is_token
                     # Token names should be uppercase
@@ -136,16 +122,8 @@ module CollieLsp
       # @param ast [Hash] Parsed AST
       # @return [Array<Hash>] Array of locations
       def find_all_occurrences(text, symbol, ast)
-        locations = []
-
-        # Find declaration
-        decl_loc = find_declaration_location(ast, symbol)
-        locations << decl_loc if decl_loc
-
-        # Find all usages in rules
-        locations.concat(find_usage_locations(text, symbol, ast))
-
-        locations.uniq { |loc| [loc[:line], loc[:column]] }
+        index = ast.is_a?(SymbolIndex) ? ast : SymbolIndex.build(ast, text)
+        index.all_occurrences(symbol).map { |entry| entry[:location] }
       end
 
       # Find declaration location
@@ -153,18 +131,7 @@ module CollieLsp
       # @param symbol [String] Symbol name
       # @return [Hash, nil] Location or nil
       def find_declaration_location(ast, symbol)
-        # Check token declarations
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token
-
-          return decl[:location] if decl[:names]&.include?(symbol) && decl[:location]
-        end
-
-        # Check nonterminal rules
-        rule = ast[:rules]&.find { |r| r[:name] == symbol }
-        return rule[:location] if rule&.dig(:location)
-
-        nil
+        SymbolIndex.build(ast, '').definition_for(symbol)&.dig(:location)
       end
 
       # Find all usage locations in rules

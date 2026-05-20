@@ -30,7 +30,7 @@ module CollieLsp
 
         # Add "Fix all" action if there are any diagnostics
         if diagnostics.any?
-          filename = uri.gsub(%r{^file://}, '')
+          filename = UriUtils.path_from_uri(uri)
           corrected = collie.autocorrect(doc[:text], filename: filename)
 
           code_actions << {

@@ -60,14 +60,8 @@ module CollieLsp
           return
         end
 
-        ast = doc[:ast]
-        unless ast
-          writer.write(id: request[:id], result: { data: [] })
-          return
-        end
-
         # Build semantic tokens
-        tokens = build_semantic_tokens(doc[:text], ast)
+        tokens = build_semantic_tokens(doc[:text], Support.symbol_index_for(doc))
 
         writer.write(
           id: request[:id],
@@ -77,11 +71,11 @@ module CollieLsp
 
       # Build semantic tokens array
       # @param text [String] Document text
-      # @param ast [Hash] Parsed AST
+      # @param source [SymbolIndex, Object, nil] Parsed symbol source
       # @return [Array<Integer>] Encoded semantic tokens
-      def build_semantic_tokens(text, ast)
+      def build_semantic_tokens(text, source)
         tokens = []
-        symbol_info = build_symbol_info(ast)
+        symbol_info = build_symbol_info(source)
 
         lines = text.lines
         lines.each_with_index do |line, line_idx|
@@ -93,27 +87,19 @@ module CollieLsp
       end
 
       # Build symbol information from AST
-      # @param ast [Hash] Parsed AST
+      # @param source [SymbolIndex, Object, nil] Parsed symbol source
       # @return [Hash] Symbol information
-      def build_symbol_info(ast)
+      def build_symbol_info(source)
+        index = source.is_a?(SymbolIndex) ? source : (SymbolIndex.build(source, '') if source)
         info = { tokens: {}, nonterminals: {}, keywords: {} }
 
-        # Collect token declarations
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token
-
-          decl[:names]&.each do |name|
-            info[:tokens][name] = true
-          end
-        end
-
-        # Collect nonterminal rules
-        ast[:rules]&.each do |rule|
-          info[:nonterminals][rule[:name]] = true
+        if index
+          index.tokens.each { |entry| info[:tokens][entry[:name]] = true }
+          index.rules.each { |entry| info[:nonterminals][entry[:name]] = true }
         end
 
         # Grammar keywords
-        %w[%token %type %left %right %nonassoc %prec %union %start].each do |kw|
+        %w[%token %type %left %right %nonassoc %prec %union %start %rule %inline].each do |kw|
           info[:keywords][kw] = true
         end
 

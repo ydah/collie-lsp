@@ -22,20 +22,19 @@ module CollieLsp
           return
         end
 
-        ast = doc[:ast]
-        unless ast
+        index = Support.symbol_index_for(doc)
+        unless index
           writer.write(id: request[:id], result: [])
           return
         end
 
-        # Find symbol at position
-        symbol = find_symbol_at_position(doc[:text], position)
+        symbol = Support.symbol_at(doc, position)
         unless symbol
           writer.write(id: request[:id], result: [])
           return
         end
 
-        locations = find_references(ast, symbol, uri, doc[:text], include_declaration)
+        locations = find_references(index, symbol, uri, include_declaration)
 
         writer.write(
           id: request[:id],
@@ -48,66 +47,20 @@ module CollieLsp
       # @param position [Hash] LSP position
       # @return [String, nil] Symbol name or nil
       def find_symbol_at_position(text, position)
-        lines = text.lines
-        line = lines[position[:line]]
-        return nil unless line
-
-        # Extract word at character position
-        char = position[:character]
-        start_pos = char
-        end_pos = char
-
-        # Move backwards to find word start
-        start_pos -= 1 while start_pos.positive? && line[start_pos - 1] =~ /[A-Za-z0-9_]/
-        # Move forwards to find word end
-        end_pos += 1 while end_pos < line.length && line[end_pos] =~ /[A-Za-z0-9_]/
-
-        line[start_pos...end_pos]
+        SymbolIndex.symbol_at(text, position)
       end
 
       # Find all references to a symbol
-      # @param ast [Hash] Parsed AST
+      # @param source [SymbolIndex, Object] Parsed symbol source
       # @param symbol [String] Symbol name
       # @param uri [String] Document URI
-      # @param text [String] Document text
       # @param include_declaration [Boolean] Include declaration in results
       # @return [Array<Hash>] LSP locations
-      def find_references(ast, symbol, uri, text, include_declaration)
-        locations = []
-
-        # Find declaration location
-        declaration_loc = find_declaration(ast, symbol)
-
-        # Add declaration if requested
-        locations << create_location(uri, declaration_loc, symbol) if include_declaration && declaration_loc
-
-        # Find all usages in rules
-        locations.concat(find_usage_in_rules(ast, symbol, uri, text))
-
-        locations
-      end
-
-      # Find symbol usage in grammar rules
-      # @param ast [Hash] Parsed AST
-      # @param symbol [String] Symbol name
-      # @param uri [String] Document URI
-      # @param text [String] Document text
-      # @return [Array<Hash>] LSP locations
-      def find_usage_in_rules(ast, symbol, uri, text)
-        locations = []
-
-        ast[:rules]&.each do |rule|
-          rule[:alternatives]&.each_with_index do |alt, alt_index|
-            alt[:symbols]&.each_with_index do |sym, sym_index|
-              next unless sym[:name] == symbol
-
-              loc = estimate_symbol_location(text, rule, alt_index, sym_index, symbol)
-              locations << create_location(uri, loc, symbol) if loc
-            end
-          end
+      def find_references(source, symbol, uri, include_declaration)
+        index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
+        index.references_for(symbol, include_declaration: include_declaration).map do |entry|
+          Support.location_to_lsp(uri, entry[:location])
         end
-
-        locations
       end
 
       # Find declaration location for a symbol
@@ -115,18 +68,7 @@ module CollieLsp
       # @param symbol [String] Symbol name
       # @return [Hash, nil] Location hash or nil
       def find_declaration(ast, symbol)
-        # Check token declarations
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token
-
-          return decl[:location] if decl[:names]&.include?(symbol) && decl[:location]
-        end
-
-        # Check nonterminal rules
-        rule = ast[:rules]&.find { |r| r[:name] == symbol }
-        return rule[:location] if rule && rule[:location]
-
-        nil
+        SymbolIndex.build(ast, '').definition_for(symbol)&.dig(:location)
       end
 
       # Estimate symbol location in text

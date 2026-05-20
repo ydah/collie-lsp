@@ -28,11 +28,11 @@ module CollieLsp
       def search_symbols(query, document_store)
         symbols = []
 
-        # Search in all open documents
-        document_store.instance_variable_get(:@documents).each do |uri, doc|
-          next unless doc[:ast]
+        document_store.each_document do |uri, doc|
+          index = Support.symbol_index_for(doc)
+          next unless index
 
-          symbols.concat(search_in_document(query, uri, doc[:ast]))
+          symbols.concat(search_in_document(query, uri, index))
         end
 
         # Sort by relevance (exact matches first, then contains)
@@ -42,57 +42,21 @@ module CollieLsp
       # Search for symbols in a single document
       # @param query [String] Search query
       # @param uri [String] Document URI
-      # @param ast [Hash] Parsed AST
+      # @param source [SymbolIndex, Object] Parsed symbol source
       # @return [Array<Hash>] Matching symbols
-      def search_in_document(query, uri, ast)
-        symbols = []
+      def search_in_document(query, uri, source)
+        index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
+        index.all_symbols.filter_map do |entry|
+          next unless matches_query?(entry[:name], query)
 
-        # Search token declarations
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token && decl[:location]
-
-          decl[:names]&.each do |name|
-            next unless matches_query?(name, query)
-
-            symbols << create_symbol_info(
-              name: name,
-              kind: 14, # Constant
-              uri: uri,
-              location: decl[:location],
-              container_name: 'Tokens'
-            )
-          end
-
-          # Search type declarations
-          next unless decl[:kind] == :type && decl[:location]
-
-          decl[:names]&.each do |name|
-            next unless matches_query?(name, query)
-
-            symbols << create_symbol_info(
-              name: name,
-              kind: 7, # Class
-              uri: uri,
-              location: decl[:location],
-              container_name: 'Types'
-            )
-          end
-        end
-
-        # Search nonterminal rules
-        ast[:rules]&.each do |rule|
-          next unless rule[:location] && matches_query?(rule[:name], query)
-
-          symbols << create_symbol_info(
-            name: rule[:name],
-            kind: 12, # Function
+          create_symbol_info(
+            name: entry[:name],
+            kind: symbol_kind(entry[:kind]),
             uri: uri,
-            location: rule[:location],
-            container_name: 'Rules'
+            location: entry[:location],
+            container_name: container_name(entry[:kind])
           )
         end
-
-        symbols
       end
 
       # Check if a symbol name matches the query
@@ -137,24 +101,40 @@ module CollieLsp
       # @param container_name [String] Container name
       # @return [Hash] LSP symbol information
       def create_symbol_info(name:, kind:, uri:, location:, container_name: nil)
-        line = location[:line] - 1
-        column = location[:column] - 1
+        lsp_location = Support.location_to_lsp(uri, location)
 
         info = {
           name: name,
           kind: kind,
-          location: {
-            uri: uri,
-            range: {
-              start: { line: line, character: column },
-              end: { line: line, character: column + name.length }
-            }
-          }
+          location: lsp_location
         }
 
         info[:containerName] = container_name if container_name
 
         info
+      end
+
+      def symbol_kind(kind)
+        case kind
+        when :token then 14
+        when :type then 7
+        when :precedence then 22
+        when :rule, :parameterized_rule, :inline_rule then 12
+        when :start then 13
+        when :union then 5
+        else 13
+        end
+      end
+
+      def container_name(kind)
+        case kind
+        when :token then 'Tokens'
+        when :type then 'Types'
+        when :precedence then 'Precedence'
+        when :rule, :parameterized_rule then 'Rules'
+        when :inline_rule then 'Lrama Extensions'
+        else 'Declarations'
+        end
       end
     end
   end

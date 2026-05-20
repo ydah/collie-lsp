@@ -79,6 +79,10 @@ module CollieLsp
         parse_result = collie.parse_result(text, filename: filename)
         document_store.update_ast(uri, parse_result.ast)
         document_store.update_parse_error(uri, parse_result.error)
+        document_store.update_symbol_index(
+          uri,
+          parse_result.ast ? SymbolIndex.build(parse_result.ast, text) : nil
+        )
 
         offenses = if parse_result.error
                      [parse_result.error]

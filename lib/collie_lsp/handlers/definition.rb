@@ -21,20 +21,19 @@ module CollieLsp
           return
         end
 
-        ast = doc[:ast]
-        unless ast
+        index = Support.symbol_index_for(doc)
+        unless index
           writer.write(id: request[:id], result: nil)
           return
         end
 
-        # Find symbol at position
-        symbol = find_symbol_at_position(doc[:text], position)
+        symbol = Support.symbol_at(doc, position)
         unless symbol
           writer.write(id: request[:id], result: nil)
           return
         end
 
-        location = find_definition_location(ast, symbol, uri)
+        location = find_definition_location(index, symbol, uri)
 
         if location
           writer.write(id: request[:id], result: location)
@@ -48,69 +47,20 @@ module CollieLsp
       # @param position [Hash] LSP position
       # @return [String, nil] Symbol name or nil
       def find_symbol_at_position(text, position)
-        lines = text.lines
-        line = lines[position[:line]]
-        return nil unless line
-
-        # Extract word at character position
-        char = position[:character]
-        start_pos = char
-        end_pos = char
-
-        # Move backwards to find word start
-        start_pos -= 1 while start_pos.positive? && line[start_pos - 1] =~ /[A-Za-z0-9_]/
-        # Move forwards to find word end
-        end_pos += 1 while end_pos < line.length && line[end_pos] =~ /[A-Za-z0-9_]/
-
-        line[start_pos...end_pos]
+        SymbolIndex.symbol_at(text, position)
       end
 
       # Find definition location for a symbol
-      # @param ast [Hash] Parsed AST
+      # @param source [SymbolIndex, Object] Parsed symbol source
       # @param symbol [String] Symbol name
       # @param uri [String] Document URI
       # @return [Hash, nil] LSP location or nil
-      def find_definition_location(ast, symbol, uri)
-        # Check if it's a token declaration
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token
+      def find_definition_location(source, symbol, uri)
+        index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
+        entry = index.definition_for(symbol)
+        return nil unless entry
 
-          if decl[:names]&.include?(symbol) && decl[:location]
-            return {
-              uri: uri,
-              range: {
-                start: {
-                  line: decl[:location][:line] - 1,
-                  character: decl[:location][:column] - 1
-                },
-                end: {
-                  line: decl[:location][:line] - 1,
-                  character: decl[:location][:column] + symbol.length - 1
-                }
-              }
-            }
-          end
-        end
-
-        # Check if it's a nonterminal rule
-        rule = ast[:rules]&.find { |r| r[:name] == symbol }
-        if rule && rule[:location]
-          return {
-            uri: uri,
-            range: {
-              start: {
-                line: rule[:location][:line] - 1,
-                character: rule[:location][:column] - 1
-              },
-              end: {
-                line: rule[:location][:line] - 1,
-                character: rule[:location][:column] + symbol.length - 1
-              }
-            }
-          }
-        end
-
-        nil
+        Support.location_to_lsp(uri, entry[:location])
       end
     end
   end

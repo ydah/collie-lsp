@@ -21,20 +21,19 @@ module CollieLsp
           return
         end
 
-        ast = doc[:ast]
-        unless ast
+        index = Support.symbol_index_for(doc)
+        unless index
           writer.write(id: request[:id], result: nil)
           return
         end
 
-        # Find symbol at position
-        symbol = find_symbol_at_position(doc[:text], position)
+        symbol = Support.symbol_at(doc, position)
         unless symbol
           writer.write(id: request[:id], result: nil)
           return
         end
 
-        hover_content = build_hover_content(ast, symbol)
+        hover_content = build_hover_content(index, symbol)
 
         if hover_content
           writer.write(
@@ -53,51 +52,42 @@ module CollieLsp
       # @param position [Hash] LSP position
       # @return [String, nil] Symbol name or nil
       def find_symbol_at_position(text, position)
-        lines = text.lines
-        line = lines[position[:line]]
-        return nil unless line
-
-        # Extract word at character position
-        char = position[:character]
-        start_pos = char
-        end_pos = char
-
-        # Move backwards to find word start
-        start_pos -= 1 while start_pos.positive? && line[start_pos - 1] =~ /[A-Za-z0-9_]/
-        # Move forwards to find word end
-        end_pos += 1 while end_pos < line.length && line[end_pos] =~ /[A-Za-z0-9_]/
-
-        line[start_pos...end_pos]
+        SymbolIndex.symbol_at(text, position)
       end
 
       # Build hover content for a symbol
-      # @param ast [Hash] Parsed AST
+      # @param source [SymbolIndex, Object] Parsed symbol source
       # @param symbol [String] Symbol name
       # @return [Hash, nil] LSP markup content or nil
-      def build_hover_content(ast, symbol)
-        # Check if it's a token
-        ast[:declarations]&.each do |decl|
-          next unless decl[:kind] == :token
+      def build_hover_content(source, symbol)
+        index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
+        entry = index.definition_for(symbol)
+        return nil unless entry
 
-          if decl[:names]&.include?(symbol)
-            return {
-              kind: 'markdown',
-              value: "**Token**: `#{symbol}`\n\nType: `#{decl[:type_tag] || 'none'}`"
-            }
-          end
+        {
+          kind: 'markdown',
+          value: hover_value(entry)
+        }
+      end
+
+      def hover_value(entry)
+        case entry[:kind]
+        when :token
+          "**Token**: `#{entry[:name]}`\n\nType: `#{entry[:type_tag] || 'none'}`"
+        when :rule
+          "**Nonterminal**: `#{entry[:name]}`\n\n#{entry[:detail]}"
+        when :parameterized_rule
+          parameters = Array(entry[:parameters]).join(', ')
+          "**Parameterized rule**: `#{entry[:name]}`\n\nParameters: `#{parameters}`"
+        when :inline_rule
+          "**Inline rule**: `#{entry[:name]}`"
+        when :type
+          "**Type**: `#{entry[:name]}`\n\nTag: `#{entry[:type_tag] || 'none'}`"
+        when :precedence
+          "**Precedence**: `#{entry[:name]}`\n\nAssociativity: `#{entry[:associativity]}`"
+        else
+          "**Symbol**: `#{entry[:name]}`"
         end
-
-        # Check if it's a nonterminal
-        rule = ast[:rules]&.find { |r| r[:name] == symbol }
-        if rule
-          alt_count = rule[:alternatives]&.size || 0
-          return {
-            kind: 'markdown',
-            value: "**Nonterminal**: `#{symbol}`\n\n#{alt_count} alternative(s)"
-          }
-        end
-
-        nil
       end
     end
   end

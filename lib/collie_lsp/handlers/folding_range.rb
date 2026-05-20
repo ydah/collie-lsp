@@ -52,13 +52,16 @@ module CollieLsp
         ranges = []
 
         # Fold grammar rules with multiple alternatives
-        ast[:rules]&.each do |rule|
-          next unless rule[:location] && rule[:alternatives]
-          next if rule[:alternatives].size < 2
+        rules = rules_from_ast(ast)
+        rules.each do |rule|
+          location = value(rule, :location)
+          alternatives = Array(value(rule, :alternatives))
+          next unless location && alternatives
+          next if alternatives.size < 2
 
           # Find the end of the rule (look for semicolon)
-          start_line = rule[:location][:line] - 1
-          end_line = find_rule_end_line(rule, ast)
+          start_line = line_for(location) - 1
+          end_line = find_rule_end_line(rule, rules)
 
           # Only create a range if the rule spans multiple lines
           ranges << create_folding_range(start_line, end_line, 'region') if end_line && end_line > start_line
@@ -90,18 +93,19 @@ module CollieLsp
       # @param rule [Hash] Rule
       # @param ast [Hash] AST (for context)
       # @return [Integer, nil] End line number or nil
-      def find_rule_end_line(rule, ast)
+      def find_rule_end_line(rule, rules)
         # Find the next rule's start line
-        rule_index = ast[:rules].index(rule)
+        rule_index = rules.index(rule)
         return nil unless rule_index
 
-        if rule_index < ast[:rules].size - 1
-          next_rule = ast[:rules][rule_index + 1]
-          return next_rule[:location][:line] - 2 if next_rule[:location]
+        if rule_index < rules.size - 1
+          next_rule = rules[rule_index + 1]
+          next_location = value(next_rule, :location)
+          return line_for(next_location) - 2 if next_location
         end
 
         # Last rule - use a default offset
-        rule[:location][:line] + 10
+        line_for(value(rule, :location)) + 10
       end
 
       # Find block comment ranges
@@ -205,6 +209,26 @@ module CollieLsp
           endLine: end_line,
           kind: kind
         }
+      end
+
+      def rules_from_ast(ast)
+        return Array(ast[:rules]) if ast.is_a?(Hash)
+        return Array(ast.rules) if ast.respond_to?(:rules)
+
+        []
+      end
+
+      def value(object, key)
+        return object[key] || object[key.to_s] if object.is_a?(Hash)
+        return object.public_send(key) if object.respond_to?(key)
+
+        nil
+      end
+
+      def line_for(location)
+        return location[:line] || location['line'] if location.is_a?(Hash)
+
+        location.line
       end
     end
   end
