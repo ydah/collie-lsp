@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'collie_lsp/version'
+require_relative 'collie_lsp/uri_utils'
 require_relative 'collie_lsp/server'
 require_relative 'collie_lsp/document_store'
 require_relative 'collie_lsp/collie_wrapper'

@@ -16,15 +16,16 @@ module CollieLsp
           offense_to_diagnostic(offense)
         end
 
+        doc = document_store.get(uri)
         document_store.update_diagnostics(uri, diagnostics)
 
-        writer.write(
-          method: 'textDocument/publishDiagnostics',
-          params: {
-            uri: uri,
-            diagnostics: diagnostics
-          }
-        )
+        params = {
+          uri: uri,
+          diagnostics: diagnostics
+        }
+        params[:version] = doc[:version] if doc&.key?(:version)
+
+        writer.write(method: 'textDocument/publishDiagnostics', params: params)
       end
 
       # Convert a Collie offense to an LSP diagnostic
@@ -35,10 +36,12 @@ module CollieLsp
         line = location[:line] - 1 # LSP is 0-indexed
         column = location[:column] - 1
 
+        length = offense[:length].to_i.positive? ? offense[:length].to_i : 1
+
         {
           range: {
             start: { line: line, character: column },
-            end: { line: line, character: column + 10 } # Approximate
+            end: { line: line, character: column + length }
           },
           severity: severity_to_lsp(offense[:severity]),
           code: offense[:rule_name] || 'unknown',

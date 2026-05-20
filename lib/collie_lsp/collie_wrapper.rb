@@ -6,6 +6,8 @@ require_relative 'collie_linter'
 module CollieLsp
   # Wrapper around the Collie gem for LSP integration
   class CollieWrapper
+    ParseResult = Struct.new(:ast, :error, keyword_init: true)
+
     # Initialize wrapper
     # @param workspace_root [String, nil] Workspace root directory for config discovery
     def initialize(workspace_root: nil)
@@ -19,13 +21,21 @@ module CollieLsp
     # @param filename [String] Filename for error messages
     # @return [Object, nil] AST or nil on error
     def parse(source, filename: 'grammar.y')
+      parse_result(source, filename: filename).ast
+    end
+
+    # Parse grammar source and keep parse error metadata.
+    # @param source [String] Grammar source code
+    # @param filename [String] Filename for error messages
+    # @return [ParseResult] AST and parse error metadata
+    def parse_result(source, filename: 'grammar.y')
       lexer = Collie::Parser::Lexer.new(source, filename: filename)
       tokens = lexer.tokenize
       parser = Collie::Parser::Parser.new(tokens)
-      parser.parse
+      ParseResult.new(ast: parser.parse, error: nil)
     rescue StandardError => e
       log_error("Parse error in #{filename}: #{e.message}")
-      nil
+      ParseResult.new(ast: nil, error: parse_error_hash(e, filename))
     end
 
     # Lint grammar source
@@ -33,26 +43,24 @@ module CollieLsp
     # @param filename [String] Filename for error messages
     # @return [Array<Hash>] Array of offenses
     def lint(source, filename: 'grammar.y')
-      ast = parse(source, filename: filename)
+      ast = parse_result(source, filename: filename).ast
       return [] unless ast
 
-      offenses = @linter.lint(ast)
-
-      # Convert Collie::Linter::Offense objects to hashes
-      offenses.map do |offense|
-        {
-          message: offense.message,
-          severity: offense.severity,
-          rule_name: offense.rule.class.rule_name,
-          location: offense.location ? {
-            line: offense.location.line,
-            column: offense.location.column
-          } : { line: 1, column: 1 }
-        }
-      end
+      lint_ast(ast)
     rescue StandardError => e
       log_error("Lint error in #{filename}: #{e.message}")
       []
+    end
+
+    # Lint an already parsed grammar AST.
+    # @param ast [Collie::AST::GrammarFile] Parsed AST
+    # @return [Array<Hash>] Array of offenses
+    def lint_ast(ast)
+      offenses = @linter.lint(ast)
+
+      offenses.map do |offense|
+        offense_to_hash(offense)
+      end
     end
 
     # Format grammar source
@@ -63,7 +71,7 @@ module CollieLsp
       ast = parse(source, filename: filename)
       return nil unless ast
 
-      formatter_options = Collie::Formatter::Options.new
+      formatter_options = Collie::Formatter::Options.new(symbolize_keys(@collie_config.formatter_options))
       formatter = Collie::Formatter::Formatter.new(formatter_options)
       formatter.format(ast)
     rescue StandardError => e
@@ -102,7 +110,7 @@ module CollieLsp
       # Only pass config_path if it exists and is readable
       if config_path && File.exist?(config_path) && File.readable?(config_path)
         begin
-          Collie::Config.new(config_path: config_path)
+          Collie::Config.new(config_path)
         rescue StandardError => e
           log_error("Failed to load config from #{config_path}: #{e.message}")
           Collie::Config.new
@@ -110,6 +118,46 @@ module CollieLsp
       else
         Collie::Config.new
       end
+    end
+
+    def offense_to_hash(offense)
+      {
+        message: offense.message,
+        severity: offense.severity,
+        rule_name: offense.rule.class.rule_name,
+        location: location_to_hash(offense.location),
+        length: offense.location&.length
+      }
+    end
+
+    def parse_error_hash(error, filename)
+      {
+        message: error.message,
+        severity: :error,
+        rule_name: 'ParseError',
+        location: error_location(error.message, filename),
+        length: 1
+      }
+    end
+
+    def error_location(message, filename)
+      match = message.match(/#{Regexp.escape(filename)}:(\d+):(\d+)/)
+      return { line: match[1].to_i, column: match[2].to_i } if match
+
+      { line: 1, column: 1 }
+    end
+
+    def location_to_hash(location)
+      return { line: 1, column: 1 } unless location
+
+      {
+        line: location.line,
+        column: location.column
+      }
+    end
+
+    def symbolize_keys(hash)
+      hash.to_h.transform_keys(&:to_sym)
     end
 
 

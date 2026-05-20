@@ -20,7 +20,7 @@ module CollieLsp
           return
         end
 
-        filename = uri.gsub(%r{^file://}, '')
+        filename = UriUtils.path_from_uri(uri)
         formatted = collie.format(doc[:text], filename: filename)
 
         unless formatted

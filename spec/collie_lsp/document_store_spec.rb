@@ -58,7 +58,9 @@ RSpec.describe CollieLsp::DocumentStore do
       doc = store.get(uri)
 
       expect(doc).to be_a(Hash)
-      expect(doc.keys).to match_array(%i[text version ast diagnostics])
+      expect(doc.keys).to include(:text, :version, :language_id, :ast,
+                                  :parse_error, :symbol_index, :semantic_tokens,
+                                  :diagnostics)
     end
 
     it 'returns nil for unknown document' do
@@ -110,6 +112,28 @@ RSpec.describe CollieLsp::DocumentStore do
 
     it 'does nothing for unknown document' do
       expect { store.update_diagnostics('unknown', []) }.not_to raise_error
+    end
+  end
+
+  describe '#change with incremental edits' do
+    before do
+      store.open(uri, "first\nsecond\n", version)
+    end
+
+    it 'applies range changes' do
+      store.change(
+        uri,
+        [{
+          range: {
+            start: { line: 1, character: 0 },
+            end: { line: 1, character: 6 }
+          },
+          text: 'changed'
+        }],
+        2
+      )
+
+      expect(store.get(uri)[:text]).to eq("first\nchanged\n")
     end
   end
 end

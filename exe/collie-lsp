@@ -2,8 +2,14 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
+require 'optparse'
 require 'collie_lsp'
 
-# Start the LSP server
+options = {}
+OptionParser.new do |parser|
+  parser.banner = 'Usage: collie-lsp [--stdio]'
+  parser.on('--stdio', 'Run the language server over stdio') { options[:stdio] = true }
+end.parse!
+
 server = CollieLsp::Server.new
 server.start

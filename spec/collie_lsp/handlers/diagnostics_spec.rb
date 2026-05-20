@@ -51,12 +51,29 @@ RSpec.describe CollieLsp::Handlers::Diagnostics do
       expect(diagnostic).to include(
         range: {
           start: { line: 9, character: 4 },
-          end: { line: 9, character: 14 }
+          end: { line: 9, character: 5 }
         },
         severity: 2,
         code: 'WarningRule',
         source: 'collie',
         message: 'Warning message'
+      )
+    end
+  end
+
+  describe '.offense_to_diagnostic' do
+    it 'uses offense length when present' do
+      diagnostic = described_class.offense_to_diagnostic(
+        location: { line: 2, column: 3 },
+        severity: :error,
+        rule_name: 'ParseError',
+        message: 'parse failed',
+        length: 4
+      )
+
+      expect(diagnostic[:range]).to eq(
+        start: { line: 1, character: 2 },
+        end: { line: 1, character: 6 }
       )
     end
   end

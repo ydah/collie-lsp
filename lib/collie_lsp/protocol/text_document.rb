@@ -16,8 +16,10 @@ module CollieLsp
         uri = params[:textDocument][:uri]
         text = params[:textDocument][:text]
         version = params[:textDocument][:version]
+        language_id = params[:textDocument][:languageId]
 
         document_store.open(uri, text, version)
+        document_store.update_language_id(uri, language_id)
         publish_diagnostics(uri, text, document_store, collie, writer)
       end
 
@@ -31,12 +33,12 @@ module CollieLsp
         uri = params[:textDocument][:uri]
         version = params[:textDocument][:version]
 
-        # For full document sync (change: 1)
-        return unless params[:contentChanges]&.first&.dig(:text)
+        changes = params[:contentChanges]
+        return unless changes&.any?
 
-        text = params[:contentChanges].first[:text]
-        document_store.change(uri, text, version)
-        publish_diagnostics(uri, text, document_store, collie, writer)
+        document_store.change(uri, changes, version)
+        doc = document_store.get(uri)
+        publish_diagnostics(uri, doc[:text], document_store, collie, writer) if doc
       end
 
       # Handle textDocument/didSave notification
@@ -59,9 +61,11 @@ module CollieLsp
       # @param document_store [DocumentStore] Document store
       # @param _collie [CollieWrapper] Collie wrapper (unused)
       # @param _writer [Object] Response writer (unused)
-      def handle_did_close(request, document_store, _collie, _writer)
+      def handle_did_close(request, document_store, _collie, writer)
         uri = request[:params][:textDocument][:uri]
         document_store.close(uri)
+
+        Handlers::Diagnostics.publish(uri, [], document_store, writer)
       end
 
       # Publish diagnostics for a document
@@ -71,8 +75,16 @@ module CollieLsp
       # @param collie [CollieWrapper] Collie wrapper
       # @param writer [Object] Response writer
       def publish_diagnostics(uri, text, document_store, collie, writer)
-        filename = uri.gsub(%r{^file://}, '')
-        offenses = collie.lint(text, filename: filename)
+        filename = UriUtils.path_from_uri(uri)
+        parse_result = collie.parse_result(text, filename: filename)
+        document_store.update_ast(uri, parse_result.ast)
+        document_store.update_parse_error(uri, parse_result.error)
+
+        offenses = if parse_result.error
+                     [parse_result.error]
+                   else
+                     collie.lint_ast(parse_result.ast)
+                   end
 
         Handlers::Diagnostics.publish(uri, offenses, document_store, writer)
       end

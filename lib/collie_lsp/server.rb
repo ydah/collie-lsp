@@ -14,6 +14,7 @@ module CollieLsp
       @document_store = DocumentStore.new
       @collie = nil
       @workspace_root = nil
+      @shutdown = false
     end
 
     # Start the server
@@ -64,12 +65,16 @@ module CollieLsp
       when 'textDocument/foldingRange'
         Handlers::FoldingRange.handle(request, @document_store, @collie, @writer)
       when 'shutdown'
+        @shutdown = true
         Protocol::Shutdown.handle(request, @writer)
       when 'exit'
         Protocol::Shutdown.handle_exit
+      else
+        write_error(request, -32_601, "Method not found: #{request[:method]}") if request[:id]
       end
     rescue StandardError => e
       log_error("Error handling request: #{e.message}\n#{e.backtrace.join("\n")}")
+      write_error(request, -32_603, e.message) if request[:id]
     end
 
     # Handle initialize request and set up workspace
@@ -88,7 +93,7 @@ module CollieLsp
       root_uri = params[:rootUri]
       return nil unless root_uri
 
-      root_uri.gsub(%r{^file://}, '')
+      UriUtils.path_from_uri(root_uri)
     end
 
     # Log error message
@@ -99,6 +104,16 @@ module CollieLsp
       File.open(ENV.fetch('COLLIE_LSP_LOG', nil), 'a') do |f|
         f.puts "[#{Time.now}] ERROR: #{message}"
       end
+    end
+
+    def write_error(request, code, message)
+      @writer.write(
+        id: request[:id],
+        error: {
+          code: code,
+          message: message
+        }
+      )
     end
   end
 end
