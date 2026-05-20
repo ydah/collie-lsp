@@ -54,4 +54,26 @@ RSpec.describe CollieLsp::Protocol::TextDocument do
       expect(document_store.get(uri)[:parse_error]).to include(rule_name: 'ParseError')
     end
   end
+
+  describe '.publish_diagnostics' do
+    it 'does not publish stale diagnostics' do
+      document_store.open(uri, "%token NUMBER\n%%\nprogram: NUMBER;\n%%\n", 1)
+      stale_generation = document_store.begin_diagnostics(uri)
+      document_store.begin_diagnostics(uri)
+
+      expect(writer).not_to receive(:write)
+
+      result = described_class.publish_diagnostics(
+        uri,
+        document_store.get(uri)[:text],
+        document_store,
+        collie,
+        writer,
+        expected_version: 1,
+        generation: stale_generation
+      )
+
+      expect(result).to be_nil
+    end
+  end
 end

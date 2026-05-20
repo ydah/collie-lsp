@@ -122,6 +122,18 @@ RSpec.describe CollieLsp::Server do
 
         expect(collie.workspace_roots).to eq(['/new'])
       end
+
+      it 'turns late responses into request-cancelled errors' do
+        cancellable_writer = described_class::CancellableWriter.new(writer, server, 99)
+        server.send(:handle_cancel_request, params: { id: 99 })
+
+        expect(writer).to receive(:write).with(
+          id: 99,
+          error: hash_including(code: CollieLsp::Server::REQUEST_CANCELLED)
+        )
+
+        cancellable_writer.write(id: 99, result: [])
+      end
     end
   end
 end

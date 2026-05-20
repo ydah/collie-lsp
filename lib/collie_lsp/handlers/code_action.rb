@@ -11,7 +11,7 @@ module CollieLsp
       # @param document_store [DocumentStore] Document store
       # @param collie [CollieWrapper] Collie wrapper
       # @param writer [Object] Response writer
-      def handle(request, document_store, collie, writer)
+      def handle(request, document_store, _collie, writer)
         uri = request[:params][:textDocument][:uri]
         range = request[:params][:range]
         only = Array(request.dig(:params, :context, :only))
@@ -32,29 +32,41 @@ module CollieLsp
         end
 
         # Add "Fix all" action if there are any diagnostics
-        if diagnostics.any? && allows_kind?(only, 'source.fixAll')
-          filename = UriUtils.path_from_uri(uri)
-          corrected = collie.autocorrect(doc[:text], filename: filename)
-
-          code_actions << {
-            title: 'Fix all auto-correctable offenses',
-            kind: 'source.fixAll',
-            edit: {
-              changes: {
-                uri => [{
-                  range: full_document_range(doc[:text]),
-                  newText: corrected
-                }]
-              }
-            }
-          }
-        end
+        code_actions << fix_all_action(uri, diagnostics) if diagnostics.any? && allows_kind?(only, 'source.fixAll')
         code_actions.select! { |action| only.empty? || only.any? { |kind| action[:kind].start_with?(kind) } }
 
         writer.write(
           id: request[:id],
           result: code_actions
         )
+      end
+
+      # Resolve expensive code actions lazily.
+      # @param request [Hash] LSP codeAction/resolve request
+      # @param document_store [DocumentStore] Document store
+      # @param collie [CollieWrapper] Collie wrapper
+      # @param writer [Object] Response writer
+      def resolve(request, document_store, collie, writer)
+        action = request[:params]
+        data = action[:data] || {}
+        uri = data[:uri] || data['uri']
+        doc = uri && document_store.get(uri)
+
+        if doc && (data[:resolve] || data['resolve']) == 'fixAll'
+          filename = UriUtils.path_from_uri(uri)
+          action = action.merge(
+            edit: {
+              changes: {
+                uri => [{
+                  range: full_document_range(doc[:text]),
+                  newText: collie.autocorrect(doc[:text], filename: filename)
+                }]
+              }
+            }
+          )
+        end
+
+        writer.write(id: request[:id], result: action)
       end
 
       # Check if a diagnostic is within the given range
@@ -91,6 +103,18 @@ module CollieLsp
 
       def allows_quickfix?(diagnostic)
         diagnostic.dig(:data, :autocorrect) != false
+      end
+
+      def fix_all_action(uri, diagnostics)
+        {
+          title: 'Fix all auto-correctable offenses',
+          kind: 'source.fixAll',
+          diagnostics: diagnostics,
+          data: {
+            resolve: 'fixAll',
+            uri: uri
+          }
+        }
       end
 
       def simple_replacement(uri, diagnostic, title, new_text)

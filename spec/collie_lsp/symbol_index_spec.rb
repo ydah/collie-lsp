@@ -37,6 +37,12 @@ RSpec.describe CollieLsp::SymbolIndex do
     expect(references).to all(include(:location))
   end
 
+  it 'computes nullable, FIRST, and FOLLOW sets for hover details' do
+    expect(index.nullable?('expr')).to be(false)
+    expect(index.first_set('program')).to eq(['NUMBER'])
+    expect(index.follow_set('expr')).to include('$end', 'PLUS')
+  end
+
   it 'extracts symbols at LSP positions' do
     expect(described_class.symbol_at('%token IDENTIFIER', line: 0, character: 10)).to eq('IDENTIFIER')
   end

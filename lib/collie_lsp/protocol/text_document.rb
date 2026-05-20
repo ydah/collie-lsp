@@ -20,7 +20,7 @@ module CollieLsp
 
         document_store.open(uri, text, version)
         document_store.update_language_id(uri, language_id)
-        publish_diagnostics(uri, text, document_store, collie, writer)
+        schedule_diagnostics(uri, document_store, collie, writer)
       end
 
       # Handle textDocument/didChange notification
@@ -38,7 +38,7 @@ module CollieLsp
 
         document_store.change(uri, changes, version)
         doc = document_store.get(uri)
-        publish_diagnostics(uri, doc[:text], document_store, collie, writer) if doc
+        schedule_diagnostics(uri, document_store, collie, writer) if doc
       end
 
       # Handle textDocument/didSave notification
@@ -53,7 +53,7 @@ module CollieLsp
 
         return unless doc
 
-        publish_diagnostics(uri, doc[:text], document_store, collie, writer)
+        schedule_diagnostics(uri, document_store, collie, writer, delay: 0.0)
       end
 
       # Handle textDocument/didClose notification
@@ -74,9 +74,43 @@ module CollieLsp
       # @param document_store [DocumentStore] Document store
       # @param collie [CollieWrapper] Collie wrapper
       # @param writer [Object] Response writer
-      def publish_diagnostics(uri, text, document_store, collie, writer)
+      def schedule_diagnostics(uri, document_store, collie, writer, delay: nil)
+        doc = document_store.get(uri)
+        return unless doc
+
+        filename = UriUtils.path_from_uri(uri)
+        generation = document_store.begin_diagnostics(uri)
+        version = doc[:version]
+        diagnostic_delay = delay || collie.diagnostics_delay(filename)
+
+        if diagnostic_delay.positive?
+          Thread.new do
+            sleep diagnostic_delay
+            latest_doc = document_store.get(uri)
+            next unless latest_doc
+
+            publish_diagnostics(
+              uri,
+              latest_doc[:text],
+              document_store,
+              collie,
+              writer,
+              expected_version: version,
+              generation: generation
+            )
+          end
+        else
+          publish_diagnostics(uri, doc[:text], document_store, collie, writer, expected_version: version, generation: generation)
+        end
+      end
+
+      def publish_diagnostics(uri, text, document_store, collie, writer, expected_version: nil, generation: nil)
+        return unless current_diagnostics?(uri, document_store, expected_version, generation)
+
         filename = UriUtils.path_from_uri(uri)
         parse_result = collie.parse_result(text, filename: filename)
+        return unless current_diagnostics?(uri, document_store, expected_version, generation)
+
         document_store.update_ast(uri, parse_result.ast)
         document_store.update_parse_error(uri, parse_result.error)
         document_store.update_symbol_index(
@@ -89,8 +123,15 @@ module CollieLsp
                    else
                      collie.lint_ast(parse_result.ast, filename: filename)
                    end
+        return unless current_diagnostics?(uri, document_store, expected_version, generation)
 
         Handlers::Diagnostics.publish(uri, offenses, document_store, writer)
+      end
+
+      def current_diagnostics?(uri, document_store, expected_version, generation)
+        return true unless generation
+
+        document_store.current_diagnostics?(uri, version: expected_version, generation: generation)
       end
     end
   end

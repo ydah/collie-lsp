@@ -60,7 +60,7 @@ RSpec.describe CollieLsp::DocumentStore do
       expect(doc).to be_a(Hash)
       expect(doc.keys).to include(:text, :version, :language_id, :ast,
                                   :parse_error, :symbol_index, :semantic_tokens,
-                                  :diagnostics)
+                                  :diagnostic_generation, :diagnostics)
     end
 
     it 'returns nil for unknown document' do
@@ -112,6 +112,21 @@ RSpec.describe CollieLsp::DocumentStore do
 
     it 'does nothing for unknown document' do
       expect { store.update_diagnostics('unknown', []) }.not_to raise_error
+    end
+  end
+
+  describe '#begin_diagnostics' do
+    before do
+      store.open(uri, text, version)
+    end
+
+    it 'tracks the latest diagnostics generation' do
+      first = store.begin_diagnostics(uri)
+      second = store.begin_diagnostics(uri)
+
+      expect(second).to be > first
+      expect(store.current_diagnostics?(uri, version: version, generation: first)).to be(false)
+      expect(store.current_diagnostics?(uri, version: version, generation: second)).to be(true)
     end
   end
 

@@ -3,6 +3,7 @@
 require 'collie'
 require 'pathname'
 require_relative 'collie_linter'
+require_relative 'lrama_diagnostics'
 
 module CollieLsp
   # Wrapper around the Collie gem for LSP integration
@@ -71,7 +72,7 @@ module CollieLsp
 
       offenses.map do |offense|
         offense_to_hash(offense)
-      end
+      end + LramaDiagnostics.analyze(ast)
     end
 
     # Format grammar source
@@ -135,6 +136,19 @@ module CollieLsp
     rescue StandardError => e
       log_error("Failed to read #{path}: #{e.message}")
       ParseResult.new(ast: nil, error: parse_error_hash(e, path))
+    end
+
+    # Diagnostics debounce delay in seconds from `.collie.yml`.
+    # Supports either `lsp.diagnostics_delay` or top-level `diagnostics_delay`.
+    # @param filename [String, nil] File path used to choose the workspace config
+    # @return [Float]
+    def diagnostics_delay(filename = nil)
+      config = config_for(filename).config
+      value = config.dig('lsp', 'diagnostics_delay') || config['diagnostics_delay'] || 0
+      delay = Float(value)
+      delay.positive? ? delay : 0.0
+    rescue ArgumentError, TypeError
+      0.0
     end
 
     private

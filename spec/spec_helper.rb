@@ -5,7 +5,7 @@ require 'simplecov'
 SimpleCov.start do
   enable_coverage :branch
   add_filter '/spec/'
-  minimum_coverage line: 75
+  minimum_coverage line: 75 if ENV['CI'] || ARGV.none? { |argument| argument.end_with?('_spec.rb') }
 end
 
 require 'collie_lsp'

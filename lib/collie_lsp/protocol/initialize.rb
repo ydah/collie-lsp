@@ -25,7 +25,9 @@ module CollieLsp
                 firstTriggerCharacter: ';',
                 moreTriggerCharacter: ['|', "\n"]
               },
-              codeActionProvider: true,
+              codeActionProvider: {
+                resolveProvider: true
+              },
               hoverProvider: true,
               completionProvider: {
                 triggerCharacters: ['%', '$', '<', '[', '('],

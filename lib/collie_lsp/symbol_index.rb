@@ -125,11 +125,15 @@ module CollieLsp
     end
 
     def nullable?(name)
-      productions_for(name).any? { |production| production == '/* empty */' }
+      grammar_sets[:nullable].include?(name)
     end
 
     def first_set(name)
-      productions_for(name).filter_map { |production| production.split.first unless production == '/* empty */' }.uniq
+      grammar_sets[:first][name].to_a.sort
+    end
+
+    def follow_set(name)
+      grammar_sets[:follow][name].to_a.sort
     end
 
     private
@@ -147,6 +151,124 @@ module CollieLsp
 
     def rules_from_ast
       Array(value(@ast, :rules))
+    end
+
+    def grammar_sets
+      @grammar_sets ||= compute_grammar_sets
+    end
+
+    def compute_grammar_sets
+      nonterminals = rules_from_ast.filter_map { |rule| value(rule, :name) }.uniq
+      nullable = []
+      first = Hash.new { |hash, key| hash[key] = [] }
+      follow = Hash.new { |hash, key| hash[key] = [] }
+      follow[nonterminals.first] << '$end' if nonterminals.first
+
+      changed = true
+      while changed
+        changed = false
+        rules_from_ast.each do |rule|
+          rule_name = value(rule, :name)
+          next unless rule_name
+
+          Array(value(rule, :alternatives)).each do |alternative|
+            symbols = Array(value(alternative, :symbols))
+            changed ||= mark_nullable?(nullable, rule_name) if symbols.empty?
+            changed ||= add_first_symbols(first, nullable, nonterminals, rule_name, symbols)
+          end
+        end
+      end
+
+      changed = true
+      while changed
+        changed = false
+        rules_from_ast.each do |rule|
+          changed ||= add_follow_symbols(follow, first, nullable, nonterminals, rule)
+        end
+      end
+
+      { nullable: nullable, first: first, follow: follow }
+    end
+
+    def mark_nullable?(nullable, rule_name)
+      return false if nullable.include?(rule_name)
+
+      nullable << rule_name
+      true
+    end
+
+    def add_first_symbols(first, nullable, nonterminals, rule_name, symbols)
+      changed = false
+      all_nullable = true
+
+      symbols.each do |symbol|
+        symbol_name = value(symbol, :name)
+        next unless symbol_name
+
+        if nonterminals.include?(symbol_name)
+          changed ||= merge_unique?(first[rule_name], first[symbol_name])
+          unless nullable.include?(symbol_name)
+            all_nullable = false
+            break
+          end
+        else
+          changed ||= merge_unique?(first[rule_name], [symbol_name])
+          all_nullable = false
+          break
+        end
+      end
+
+      changed || (all_nullable && mark_nullable?(nullable, rule_name))
+    end
+
+    def add_follow_symbols(follow, first, nullable, nonterminals, rule)
+      rule_name = value(rule, :name)
+      changed = false
+
+      Array(value(rule, :alternatives)).each do |alternative|
+        symbols = Array(value(alternative, :symbols))
+        symbols.each_with_index do |symbol, index|
+          symbol_name = value(symbol, :name)
+          next unless nonterminals.include?(symbol_name)
+
+          trailing = symbols[(index + 1)..] || []
+          first_trailing = first_for_sequence(first, nullable, nonterminals, trailing)
+          changed ||= merge_unique?(follow[symbol_name], first_trailing[:tokens])
+          changed ||= merge_unique?(follow[symbol_name], follow[rule_name]) if first_trailing[:nullable]
+        end
+      end
+
+      changed
+    end
+
+    def first_for_sequence(first, nullable, nonterminals, symbols)
+      tokens = []
+      sequence_nullable = true
+
+      symbols.each do |symbol|
+        symbol_name = value(symbol, :name)
+        next unless symbol_name
+
+        if nonterminals.include?(symbol_name)
+          merge_unique?(tokens, first[symbol_name])
+          unless nullable.include?(symbol_name)
+            sequence_nullable = false
+            break
+          end
+        else
+          merge_unique?(tokens, [symbol_name])
+          sequence_nullable = false
+          break
+        end
+      end
+
+      { tokens: tokens, nullable: sequence_nullable }
+    end
+
+    def merge_unique?(target, values)
+      before = target.size
+      values.each { |value| target << value unless target.include?(value) }
+      target.size != before
     end
 
     def add_declaration(declaration)

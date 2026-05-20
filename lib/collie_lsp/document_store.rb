@@ -20,6 +20,7 @@ module CollieLsp
         parse_error: nil,
         symbol_index: nil,
         semantic_tokens: nil,
+        diagnostic_generation: 0,
         diagnostics: []
       }
     end
@@ -112,6 +113,27 @@ module CollieLsp
       return unless @documents[uri]
 
       @documents[uri][:diagnostics] = diagnostics
+    end
+
+    # Start a diagnostics pass and return its generation token.
+    # @param uri [String] Document URI
+    # @return [Integer, nil] Diagnostics generation token
+    def begin_diagnostics(uri)
+      return unless @documents[uri]
+
+      @documents[uri][:diagnostic_generation] += 1
+    end
+
+    # Check whether a diagnostics pass still matches the latest document state.
+    # @param uri [String] Document URI
+    # @param version [Integer, nil] Expected document version
+    # @param generation [Integer, nil] Expected diagnostics generation
+    # @return [Boolean]
+    def current_diagnostics?(uri, version:, generation:)
+      doc = @documents[uri]
+      return false unless doc
+
+      doc[:version] == version && doc[:diagnostic_generation] == generation
     end
 
     private

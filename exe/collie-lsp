@@ -3,13 +3,28 @@
 
 require 'bundler/setup'
 require 'optparse'
+require 'socket'
 require 'collie_lsp'
 
 options = {}
 OptionParser.new do |parser|
-  parser.banner = 'Usage: collie-lsp [--stdio]'
+  parser.banner = 'Usage: collie-lsp [--stdio] [--socket [HOST:]PORT]'
   parser.on('--stdio', 'Run the language server over stdio') { options[:stdio] = true }
+  parser.on('--socket ADDRESS', 'Run the language server over TCP, for example 127.0.0.1:2087 or 2087') do |address|
+    options[:socket] = address
+  end
 end.parse!
 
-server = CollieLsp::Server.new
-server.start
+if options[:socket]
+  host, port = options[:socket].split(':', 2)
+  if port.nil?
+    port = host
+    host = '127.0.0.1'
+  end
+
+  tcp_server = TCPServer.new(host, Integer(port))
+  client = tcp_server.accept
+  CollieLsp::Server.new(input: client, output: client).start
+else
+  CollieLsp::Server.new.start
+end

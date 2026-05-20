@@ -107,6 +107,8 @@ module CollieLsp
         details << "Nullable: #{index.nullable?(entry[:name]) ? 'yes' : 'no'}"
         first = index.first_set(entry[:name])
         details << "FIRST: `#{first.join('`, `')}`" unless first.empty?
+        follow = index.follow_set(entry[:name])
+        details << "FOLLOW: `#{follow.join('`, `')}`" unless follow.empty?
         details << "Productions:\n#{productions.map { |production| "- `#{production}`" }.join("\n")}" unless productions.empty?
         details.join("\n\n")
       end

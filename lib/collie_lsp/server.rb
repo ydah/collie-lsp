@@ -25,6 +25,36 @@ module CollieLsp
       $/cancelRequest
       exit
     ].freeze
+    SERIAL_REQUEST_METHODS = %w[initialize shutdown].freeze
+
+    # Suppresses stale request responses when the client has cancelled the id.
+    class CancellableWriter
+      def initialize(writer, server, request_id)
+        @writer = writer
+        @server = server
+        @request_id = request_id
+      end
+
+      def write(message)
+        if response_for_request?(message) && @server.__send__(:consume_cancelled_request, @request_id)
+          @writer.write(
+            id: @request_id,
+            error: {
+              code: Server::REQUEST_CANCELLED,
+              message: 'Request cancelled'
+            }
+          )
+        else
+          @writer.write(message)
+        end
+      end
+
+      private
+
+      def response_for_request?(message)
+        message.is_a?(Hash) && message[:id] == @request_id
+      end
+    end
 
     # Initialize server
     # @param input [IO] Input stream (default: stdin)
@@ -39,13 +69,21 @@ module CollieLsp
       @initialized = false
       @shutdown = false
       @cancelled_request_ids = {}
+      @cancel_mutex = Mutex.new
     end
 
     # Start the server
     def start
+      request_threads = []
       @reader.read do |request|
-        handle_request(request)
+        if threaded_request?(request)
+          request_threads << Thread.new { handle_request(request) }
+        else
+          handle_request(request)
+        end
       end
+    ensure
+      request_threads&.each(&:join)
     end
 
     private
@@ -58,49 +96,52 @@ module CollieLsp
       return reject_after_shutdown(request) unless post_shutdown_request_allowed?(request)
       return write_error(request, REQUEST_CANCELLED, 'Request cancelled') if cancelled?(request)
 
+      writer = writer_for(request)
       case request[:method]
       when 'initialize'
         handle_initialize(request)
       when 'initialized'
-        Protocol::Initialize.handle_initialized(request, @writer)
+        Protocol::Initialize.handle_initialized(request, writer)
       when 'textDocument/didOpen'
-        Protocol::TextDocument.handle_did_open(request, @document_store, @collie, @writer)
+        Protocol::TextDocument.handle_did_open(request, @document_store, @collie, writer)
       when 'textDocument/didChange'
-        Protocol::TextDocument.handle_did_change(request, @document_store, @collie, @writer)
+        Protocol::TextDocument.handle_did_change(request, @document_store, @collie, writer)
       when 'textDocument/didSave'
-        Protocol::TextDocument.handle_did_save(request, @document_store, @collie, @writer)
+        Protocol::TextDocument.handle_did_save(request, @document_store, @collie, writer)
       when 'textDocument/didClose'
-        Protocol::TextDocument.handle_did_close(request, @document_store, @collie, @writer)
+        Protocol::TextDocument.handle_did_close(request, @document_store, @collie, writer)
       when 'textDocument/formatting'
-        Handlers::Formatting.handle(request, @document_store, @collie, @writer)
+        Handlers::Formatting.handle(request, @document_store, @collie, writer)
       when 'textDocument/rangeFormatting'
-        Handlers::Formatting.handle_range(request, @document_store, @collie, @writer)
+        Handlers::Formatting.handle_range(request, @document_store, @collie, writer)
       when 'textDocument/onTypeFormatting'
-        Handlers::Formatting.handle_on_type(request, @document_store, @collie, @writer)
+        Handlers::Formatting.handle_on_type(request, @document_store, @collie, writer)
       when 'textDocument/codeAction'
-        Handlers::CodeAction.handle(request, @document_store, @collie, @writer)
+        Handlers::CodeAction.handle(request, @document_store, @collie, writer)
+      when 'codeAction/resolve'
+        Handlers::CodeAction.resolve(request, @document_store, @collie, writer)
       when 'textDocument/hover'
-        Handlers::Hover.handle(request, @document_store, @collie, @writer)
+        Handlers::Hover.handle(request, @document_store, @collie, writer)
       when 'textDocument/completion'
-        Handlers::Completion.handle(request, @document_store, @collie, @writer)
+        Handlers::Completion.handle(request, @document_store, @collie, writer)
       when 'completionItem/resolve'
-        Handlers::Completion.resolve(request, @document_store, @collie, @writer)
+        Handlers::Completion.resolve(request, @document_store, @collie, writer)
       when 'textDocument/definition'
-        Handlers::Definition.handle(request, @document_store, @collie, @writer)
+        Handlers::Definition.handle(request, @document_store, @collie, writer)
       when 'textDocument/references'
-        Handlers::References.handle(request, @document_store, @collie, @writer)
+        Handlers::References.handle(request, @document_store, @collie, writer)
       when 'textDocument/documentSymbol'
-        Handlers::DocumentSymbol.handle(request, @document_store, @collie, @writer)
+        Handlers::DocumentSymbol.handle(request, @document_store, @collie, writer)
       when 'textDocument/rename'
-        Handlers::Rename.handle(request, @document_store, @collie, @writer)
+        Handlers::Rename.handle(request, @document_store, @collie, writer)
       when 'textDocument/prepareRename'
-        Handlers::Rename.prepare(request, @document_store, @collie, @writer)
+        Handlers::Rename.prepare(request, @document_store, @collie, writer)
       when 'textDocument/semanticTokens/full'
-        Handlers::SemanticTokens.handle(request, @document_store, @collie, @writer)
+        Handlers::SemanticTokens.handle(request, @document_store, @collie, writer)
       when 'textDocument/semanticTokens/full/delta'
-        Handlers::SemanticTokens.handle_delta(request, @document_store, @collie, @writer)
+        Handlers::SemanticTokens.handle_delta(request, @document_store, @collie, writer)
       when 'textDocument/semanticTokens/range'
-        Handlers::SemanticTokens.handle_range(request, @document_store, @collie, @writer)
+        Handlers::SemanticTokens.handle_range(request, @document_store, @collie, writer)
       when 'workspace/didChangeConfiguration'
         handle_configuration_change
       when 'workspace/didChangeWatchedFiles'
@@ -108,12 +149,12 @@ module CollieLsp
       when 'workspace/didChangeWorkspaceFolders'
         handle_workspace_folders_change(request)
       when 'workspace/symbol'
-        Handlers::WorkspaceSymbol.handle(request, @document_store, @collie, @writer)
+        Handlers::WorkspaceSymbol.handle(request, @document_store, @collie, writer)
       when 'textDocument/foldingRange'
-        Handlers::FoldingRange.handle(request, @document_store, @collie, @writer)
+        Handlers::FoldingRange.handle(request, @document_store, @collie, writer)
       when 'shutdown'
         @shutdown = true
-        Protocol::Shutdown.handle(request, @writer)
+        Protocol::Shutdown.handle(request, writer)
       when 'exit'
         Protocol::Shutdown.handle_exit(shutdown: @shutdown)
       else
@@ -203,11 +244,23 @@ module CollieLsp
 
     def handle_cancel_request(request)
       id = request.dig(:params, :id)
-      @cancelled_request_ids[id] = true if id
+      @cancel_mutex.synchronize { @cancelled_request_ids[id] = true } if id
     end
 
     def cancelled?(request)
-      @cancelled_request_ids.delete(request[:id])
+      consume_cancelled_request(request[:id])
+    end
+
+    def consume_cancelled_request(request_id)
+      @cancel_mutex.synchronize { @cancelled_request_ids.delete(request_id) }
+    end
+
+    def writer_for(request)
+      request[:id] ? CancellableWriter.new(@writer, self, request[:id]) : @writer
+    end
+
+    def threaded_request?(request)
+      request[:id] && !SERIAL_REQUEST_METHODS.include?(request[:method])
     end
 
     def reload_configuration

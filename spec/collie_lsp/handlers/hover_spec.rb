@@ -95,6 +95,21 @@ RSpec.describe CollieLsp::Handlers::Hover do
       )
     end
 
+    it 'includes grammar analysis details for real rules' do
+      source = <<~GRAMMAR
+        %token NUMBER PLUS
+        %%
+        program: expr ;
+        expr: NUMBER | expr PLUS NUMBER ;
+        %%
+      GRAMMAR
+      ast = CollieLsp::CollieWrapper.new.parse(source, filename: 'test.y')
+
+      content = described_class.build_hover_content(CollieLsp::SymbolIndex.build(ast, source), 'expr')
+
+      expect(content[:value]).to include('FIRST:', 'FOLLOW:')
+    end
+
     it 'returns nil for unknown symbol' do
       content = described_class.build_hover_content(ast, 'unknown')
       expect(content).to be_nil
