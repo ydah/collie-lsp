@@ -17,6 +17,12 @@ RSpec.describe CollieLsp::CollieWrapper do
         wrapper = described_class.new(workspace_root: '/nonexistent')
         expect(wrapper).to be_a(described_class)
       end
+
+      it 'tracks multiple workspace roots' do
+        wrapper = described_class.new(workspace_roots: ['/one', '/two'])
+
+        expect(wrapper.workspace_roots).to eq(['/one', '/two'])
+      end
     end
   end
 
@@ -102,6 +108,27 @@ RSpec.describe CollieLsp::CollieWrapper do
 
       expect(corrected).to be_a(String)
       # Autocorrect delegates to format, so it should return formatted source
+    end
+  end
+
+  describe '#workspace_grammar_files' do
+    it 'returns included grammar files only' do
+      temp_dir = Dir.mktmpdir
+      File.write(File.join(temp_dir, '.collie.yml'), <<~YAML)
+        include:
+          - grammar/**/*.y
+      YAML
+      FileUtils.mkdir_p(File.join(temp_dir, 'grammar'))
+      included = File.join(temp_dir, 'grammar', 'parser.y')
+      excluded = File.join(temp_dir, 'other.y')
+      File.write(included, '')
+      File.write(excluded, '')
+
+      wrapper = described_class.new(workspace_root: temp_dir)
+
+      expect(wrapper.workspace_grammar_files).to contain_exactly(included)
+    ensure
+      FileUtils.rm_rf(temp_dir) if temp_dir
     end
   end
 

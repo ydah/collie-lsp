@@ -39,7 +39,13 @@ module CollieLsp
                 }
               },
               workspaceSymbolProvider: true,
-              foldingRangeProvider: true
+              foldingRangeProvider: true,
+              workspace: {
+                workspaceFolders: {
+                  supported: true,
+                  changeNotifications: true
+                }
+              }
             },
             serverInfo: {
               name: 'collie-lsp',

@@ -17,8 +17,8 @@ module CollieLsp
       end
 
       # Handle exit notification
-      def handle_exit
-        exit(0)
+      def handle_exit(shutdown: true)
+        exit(shutdown ? 0 : 1)
       end
     end
   end

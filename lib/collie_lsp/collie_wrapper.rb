@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'collie'
+require 'pathname'
 require_relative 'collie_linter'
 
 module CollieLsp
@@ -10,11 +11,13 @@ module CollieLsp
 
     # Initialize wrapper
     # @param workspace_root [String, nil] Workspace root directory for config discovery
-    def initialize(workspace_root: nil)
-      config_path = find_config(workspace_root)
-      @collie_config = load_collie_config(config_path)
-      @linter = CollieLinter.new(@collie_config)
+    # @param workspace_roots [Array<String>, nil] Workspace roots for multi-root workspaces
+    def initialize(workspace_root: nil, workspace_roots: nil)
+      @workspace_roots = Array(workspace_roots || workspace_root).compact.uniq
+      reload_config!
     end
+
+    attr_reader :workspace_roots
 
     # Parse grammar source into AST
     # @param source [String] Grammar source code
@@ -46,7 +49,7 @@ module CollieLsp
       ast = parse_result(source, filename: filename).ast
       return [] unless ast
 
-      lint_ast(ast)
+      lint_ast(ast, filename: filename)
     rescue StandardError => e
       log_error("Lint error in #{filename}: #{e.message}")
       []
@@ -55,8 +58,8 @@ module CollieLsp
     # Lint an already parsed grammar AST.
     # @param ast [Collie::AST::GrammarFile] Parsed AST
     # @return [Array<Hash>] Array of offenses
-    def lint_ast(ast)
-      offenses = @linter.lint(ast)
+    def lint_ast(ast, filename: nil)
+      offenses = linter_for(filename).lint(ast)
 
       offenses.map do |offense|
         offense_to_hash(offense)
@@ -71,7 +74,7 @@ module CollieLsp
       ast = parse(source, filename: filename)
       return nil unless ast
 
-      formatter_options = Collie::Formatter::Options.new(symbolize_keys(@collie_config.formatter_options))
+      formatter_options = Collie::Formatter::Options.new(symbolize_keys(config_for(filename).formatter_options))
       formatter = Collie::Formatter::Formatter.new(formatter_options)
       formatter.format(ast)
     rescue StandardError => e
@@ -91,6 +94,41 @@ module CollieLsp
       source
     end
 
+    # Reload `.collie.yml` for all workspace roots.
+    def reload_config!
+      @configs_by_root = {}
+      @linters_by_root = {}
+
+      workspace_roots.each do |root|
+        config = load_collie_config(find_config(root))
+        @configs_by_root[root] = config
+        @linters_by_root[root] = CollieLinter.new(config)
+      end
+
+      @collie_config = @configs_by_root.values.first || Collie::Config.new
+      @linter = @linters_by_root.values.first || CollieLinter.new(@collie_config)
+    end
+
+    # Return workspace .y files respecting Collie include/exclude settings.
+    # @return [Array<String>] Absolute file paths
+    def workspace_grammar_files
+      workspace_roots.flat_map do |root|
+        Dir.glob(File.join(root, '**', '*')).select do |path|
+          File.file?(path) && included_file?(path)
+        end
+      end.uniq
+    end
+
+    # Parse a file from disk.
+    # @param path [String] File path
+    # @return [ParseResult]
+    def parse_file(path)
+      parse_result(File.read(path), filename: path)
+    rescue StandardError => e
+      log_error("Failed to read #{path}: #{e.message}")
+      ParseResult.new(ast: nil, error: parse_error_hash(e, path))
+    end
+
     private
 
     # Find configuration file
@@ -101,6 +139,45 @@ module CollieLsp
 
       config_file = File.join(root, '.collie.yml')
       File.exist?(config_file) ? config_file : nil
+    end
+
+    def included_file?(path)
+      root = workspace_root_for(path)
+      return File.extname(path) == '.y' unless root
+
+      relative = relative_path(path, root)
+      config = config_for(path)
+      included = config.included_patterns.any? { |pattern| File.fnmatch?(pattern, relative, File::FNM_PATHNAME) }
+      excluded = config.excluded_patterns.any? { |pattern| File.fnmatch?(pattern, relative, File::FNM_PATHNAME) }
+
+      included && !excluded
+    end
+
+    def linter_for(filename)
+      root = workspace_root_for(filename)
+      return @linter unless root
+
+      @linters_by_root[root] || @linter
+    end
+
+    def config_for(filename)
+      root = workspace_root_for(filename)
+      return @collie_config unless root
+
+      @configs_by_root[root] || @collie_config
+    end
+
+    def workspace_root_for(path)
+      return nil unless path
+
+      expanded_path = File.expand_path(path)
+      workspace_roots.select { |root| expanded_path.start_with?(File.expand_path(root)) }.max_by(&:length)
+    end
+
+    def relative_path(path, root)
+      Pathname.new(File.expand_path(path)).relative_path_from(Pathname.new(File.expand_path(root))).to_s
+    rescue ArgumentError
+      path
     end
 
     # Load Collie configuration

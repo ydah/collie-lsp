@@ -87,7 +87,7 @@ module CollieLsp
         offenses = if parse_result.error
                      [parse_result.error]
                    else
-                     collie.lint_ast(parse_result.ast)
+                     collie.lint_ast(parse_result.ast, filename: filename)
                    end
 
         Handlers::Diagnostics.publish(uri, offenses, document_store, writer)

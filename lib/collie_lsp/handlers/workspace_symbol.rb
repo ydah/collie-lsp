@@ -9,11 +9,11 @@ module CollieLsp
       # Handle workspace/symbol request
       # @param request [Hash] LSP request
       # @param document_store [DocumentStore] Document store
-      # @param _collie [CollieWrapper] Collie wrapper (unused)
+      # @param collie [CollieWrapper] Collie wrapper
       # @param writer [Object] Response writer
-      def handle(request, document_store, _collie, writer)
+      def handle(request, document_store, collie, writer)
         query = request[:params][:query] || ''
-        symbols = search_symbols(query, document_store)
+        symbols = search_symbols(query, document_store, collie)
 
         writer.write(
           id: request[:id],
@@ -25,18 +25,37 @@ module CollieLsp
       # @param query [String] Search query
       # @param document_store [DocumentStore] Document store
       # @return [Array<Hash>] Matching symbols
-      def search_symbols(query, document_store)
+      def search_symbols(query, document_store, collie = nil)
         symbols = []
+        open_uris = []
 
         document_store.each_document do |uri, doc|
           index = Support.symbol_index_for(doc)
           next unless index
 
+          open_uris << uri
           symbols.concat(search_in_document(query, uri, index))
         end
 
+        symbols.concat(search_workspace_files(query, collie, open_uris)) if collie
+
         # Sort by relevance (exact matches first, then contains)
         symbols.sort_by { |s| symbol_relevance(s[:name], query) }
+      end
+
+      def search_workspace_files(query, collie, open_uris)
+        collie.workspace_grammar_files.flat_map do |path|
+          uri = UriUtils.file_uri(path)
+          next [] if open_uris.include?(uri)
+
+          result = collie.parse_file(path)
+          next [] unless result.ast
+
+          text = File.read(path)
+          search_in_document(query, uri, SymbolIndex.build(result.ast, text))
+        rescue StandardError
+          []
+        end
       end
 
       # Search for symbols in a single document

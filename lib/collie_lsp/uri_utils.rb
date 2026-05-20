@@ -8,6 +8,11 @@ module CollieLsp
   module UriUtils
     module_function
 
+    def file_uri(path)
+      escaped = CGI.escape(File.expand_path(path)).gsub('+', '%20').gsub('%2F', '/')
+      "file://#{escaped}"
+    end
+
     def path_from_uri(uri)
       parsed = URI.parse(uri)
       return CGI.unescape(uri.delete_prefix('file://')) unless parsed.scheme == 'file'

@@ -26,6 +26,21 @@ RSpec.describe CollieLsp::Server do
         expect(root).to eq('/workspace/path')
       end
 
+      it 'uses the first workspace folder when present' do
+        request = {
+          params: {
+            workspaceFolders: [
+              { uri: 'file:///workspace/one', name: 'one' },
+              { uri: 'file:///workspace/two', name: 'two' }
+            ],
+            rootUri: 'file:///workspace/root'
+          }
+        }
+
+        root = server.send(:extract_workspace_root, request)
+        expect(root).to eq('/workspace/one')
+      end
+
       it 'returns nil for nil rootUri' do
         request = { params: {} }
 
@@ -49,6 +64,43 @@ RSpec.describe CollieLsp::Server do
         server.send(:log_error, 'test error')
 
         ENV.delete('COLLIE_LSP_LOG')
+      end
+    end
+
+    describe '#handle_request lifecycle' do
+      let(:writer) { mock_writer }
+
+      before do
+        server.instance_variable_set(:@writer, writer)
+      end
+
+      it 'rejects normal requests before initialize' do
+        expect(writer).to receive(:write).with(
+          id: 1,
+          error: hash_including(code: CollieLsp::Server::SERVER_NOT_INITIALIZED)
+        )
+
+        server.send(:handle_request, id: 1, method: 'textDocument/hover', params: {})
+      end
+
+      it 'rejects requests after shutdown' do
+        server.instance_variable_set(:@initialized, true)
+        server.instance_variable_set(:@shutdown, true)
+
+        expect(writer).to receive(:write).with(
+          id: 1,
+          error: hash_including(code: CollieLsp::Server::INVALID_REQUEST)
+        )
+
+        server.send(:handle_request, id: 1, method: 'textDocument/hover', params: {})
+      end
+
+      it 'stores cancelled request ids without responding' do
+        expect(writer).not_to receive(:write)
+
+        server.send(:handle_request, method: '$/cancelRequest', params: { id: 99 })
+
+        expect(server.instance_variable_get(:@cancelled_request_ids)).to include(99 => true)
       end
     end
   end
