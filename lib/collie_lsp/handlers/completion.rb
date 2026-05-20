@@ -119,8 +119,6 @@ module CollieLsp
           completion_item(entry, kind: 3, detail: "Inline rule: #{entry[:name]}", documentation: 'Lrama inline rule')
         when :type
           completion_item(entry, kind: 7, detail: "Type: #{entry[:name]}", documentation: 'Typed nonterminal')
-        else
-          nil
         end
       end
 

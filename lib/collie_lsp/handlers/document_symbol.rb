@@ -134,7 +134,6 @@ module CollieLsp
         when :type then 7
         when :precedence then 22
         when :rule, :parameterized_rule, :inline_rule then 12
-        when :start then 13
         when :union then 5
         else 13
         end

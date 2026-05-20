@@ -73,7 +73,7 @@ module CollieLsp
         when 'TrailingWhitespace'
           [simple_replacement(uri, diagnostic, 'Remove trailing whitespace', '')]
         when 'TokenNaming'
-          [rename_symbol_action(uri, doc, diagnostic, 'Convert token to upper case') { |symbol| symbol.upcase }]
+          [rename_symbol_action(uri, doc, diagnostic, 'Convert token to upper case', &:upcase)]
         when 'NonterminalNaming'
           [rename_symbol_action(uri, doc, diagnostic, 'Convert nonterminal to snake case') { |symbol| snake_case(symbol) }]
         when 'UndefinedSymbol'

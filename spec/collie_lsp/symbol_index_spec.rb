@@ -43,7 +43,7 @@ RSpec.describe CollieLsp::SymbolIndex do
 
   context 'with Lrama extensions' do
     let(:source) do
-      <<~'GRAMMAR'
+      <<~GRAMMAR
         %token NUMBER
         %rule list(item): item | list(item) item ;
         %inline opt

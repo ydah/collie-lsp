@@ -71,9 +71,11 @@ module CollieLsp
     end
 
     def contains?(range, position)
-      starts_before = range[:start][:line] < position[:line] ||
+      starts_before =
+        range[:start][:line] < position[:line] ||
         (range[:start][:line] == position[:line] && range[:start][:character] <= position[:character])
-      ends_after = range[:end][:line] > position[:line] ||
+      ends_after =
+        range[:end][:line] > position[:line] ||
         (range[:end][:line] == position[:line] && range[:end][:character] >= position[:character])
 
       starts_before && ends_after

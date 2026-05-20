@@ -18,8 +18,8 @@ jobs:
       with:
         ruby-version: ${{ matrix.ruby-version }}
         bundler-cache: true
-    - name: Run tests
-      run: bundle exec rspec
+    - name: Run quality checks
+      run: bundle exec rake
   vscode-extension:
     runs-on: ubuntu-latest
     steps:

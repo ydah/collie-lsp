@@ -56,13 +56,13 @@ module CollieLsp
       # @param severity [Symbol] Collie severity (:error, :warning, :convention, :info)
       # @return [Integer] LSP severity (1-4)
       def severity_to_lsp(severity)
-        case severity
-        when :error then 1    # Error
-        when :warning then 2  # Warning
-        when :convention then 3 # Information
-        when :info then 4 # Hint
-        else 3
-        end
+        severity_key = severity.respond_to?(:to_sym) ? severity.to_sym : severity
+        {
+          error: 1,
+          warning: 2,
+          convention: 3,
+          info: 4
+        }.fetch(severity_key, 3)
       end
     end
   end

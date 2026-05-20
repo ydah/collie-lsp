@@ -245,7 +245,6 @@ module CollieLsp
       hash.to_h.transform_keys(&:to_sym)
     end
 
-
     # Log error message
     # @param message [String] Error message
     def log_error(message)

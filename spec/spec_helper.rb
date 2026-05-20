@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+require 'simplecov'
+
+SimpleCov.start do
+  enable_coverage :branch
+  add_filter '/spec/'
+  minimum_coverage line: 75
+end
+
 require 'collie_lsp'
 
 RSpec.configure do |config|

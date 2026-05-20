@@ -159,7 +159,7 @@ RSpec.describe CollieLsp::Handlers::Rename do
 
   describe '.build_workspace_edit' do
     it 'renames named references and action references together' do
-      text = <<~'GRAMMAR'
+      text = <<~GRAMMAR
         %token NUMBER
         %%
         expr: NUMBER[num] { $$ = $num; } ;
