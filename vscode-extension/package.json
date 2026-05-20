@@ -1,7 +1,7 @@
 {
-  "name": "collie-lsp-test",
-  "displayName": "Collie LSP Test",
-  "description": "Test extension for collie-lsp",
+  "name": "collie-lsp",
+  "displayName": "Collie LSP",
+  "description": "Language support for Lrama style BNF grammar files using collie-lsp",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.75.0"

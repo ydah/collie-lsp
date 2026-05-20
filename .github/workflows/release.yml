@@ -1,0 +1,38 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.4'
+        bundler-cache: true
+    - name: Run tests
+      run: bundle exec rspec
+    - name: Build gem
+      run: bundle exec rake build
+    - name: Upload gem artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gem
+        path: pkg/*.gem
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_RUBYGEMS == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: gem
+        path: pkg
+    - name: Publish gem
+      env:
+        GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+      run: gem push pkg/*.gem

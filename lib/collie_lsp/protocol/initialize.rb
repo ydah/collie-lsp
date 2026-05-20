@@ -34,7 +34,9 @@ module CollieLsp
                   tokenTypes: Handlers::SemanticTokens::TOKEN_TYPES,
                   tokenModifiers: Handlers::SemanticTokens::TOKEN_MODIFIERS
                 },
-                full: true
+                full: {
+                  delta: true
+                }
               },
               workspaceSymbolProvider: true,
               foldingRangeProvider: true

@@ -60,6 +60,8 @@ module CollieLsp
         Handlers::Rename.handle(request, @document_store, @collie, @writer)
       when 'textDocument/semanticTokens/full'
         Handlers::SemanticTokens.handle(request, @document_store, @collie, @writer)
+      when 'textDocument/semanticTokens/full/delta'
+        Handlers::SemanticTokens.handle_delta(request, @document_store, @collie, @writer)
       when 'workspace/symbol'
         Handlers::WorkspaceSymbol.handle(request, @document_store, @collie, @writer)
       when 'textDocument/foldingRange'

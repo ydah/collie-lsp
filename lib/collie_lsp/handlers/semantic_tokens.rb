@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'digest'
+
 module CollieLsp
   module Handlers
     # Semantic tokens support for syntax highlighting
@@ -62,11 +64,46 @@ module CollieLsp
 
         # Build semantic tokens
         tokens = build_semantic_tokens(doc[:text], Support.symbol_index_for(doc))
+        result_id = result_id_for(doc, tokens)
+        document_store.update_semantic_tokens(uri, result_id: result_id, data: tokens)
 
         writer.write(
           id: request[:id],
-          result: { data: tokens }
+          result: { resultId: result_id, data: tokens }
         )
+      end
+
+      # Handle textDocument/semanticTokens/full/delta request.
+      # @param request [Hash] LSP request
+      # @param document_store [DocumentStore] Document store
+      # @param _collie [CollieWrapper] Collie wrapper (unused)
+      # @param writer [Object] Response writer
+      def handle_delta(request, document_store, _collie, writer)
+        uri = request[:params][:textDocument][:uri]
+        previous_result_id = request[:params][:previousResultId]
+        doc = document_store.get(uri)
+
+        unless doc
+          writer.write(id: request[:id], result: { edits: [] })
+          return
+        end
+
+        tokens = build_semantic_tokens(doc[:text], Support.symbol_index_for(doc))
+        result_id = result_id_for(doc, tokens)
+        previous = doc[:semantic_tokens]
+        document_store.update_semantic_tokens(uri, result_id: result_id, data: tokens)
+
+        edits = if previous && previous[:result_id] == previous_result_id && previous[:data] == tokens
+                  []
+                else
+                  [{
+                    start: 0,
+                    deleteCount: previous&.dig(:data)&.size || 0,
+                    data: tokens
+                  }]
+                end
+
+        writer.write(id: request[:id], result: { resultId: result_id, edits: edits })
       end
 
       # Build semantic tokens array
@@ -155,6 +192,26 @@ module CollieLsp
             if str_len
               tokens << create_token(line_idx, pos, str_len, :string)
               pos += str_len
+              next
+            end
+          end
+
+          # Check for Lrama action references
+          if line[pos] == '$'
+            reference = line[pos..].match(/\A\$\$|\A\$[A-Za-z_][A-Za-z0-9_]*|\A\$\d+/)&.to_s
+            if reference
+              tokens << create_token(line_idx, pos, reference.length, :parameter)
+              pos += reference.length
+              next
+            end
+          end
+
+          # Check for named references
+          if line[pos] == '['
+            match = line[pos..].match(/\A\[([A-Za-z_][A-Za-z0-9_]*)\]/)
+            if match
+              tokens << create_token(line_idx, pos + 1, match[1].length, :parameter)
+              pos += match[0].length
               next
             end
           end
@@ -282,6 +339,11 @@ module CollieLsp
         end
 
         encoded
+      end
+
+      def result_id_for(doc, tokens)
+        digest = Digest::SHA256.hexdigest(tokens.join(','))
+        "#{doc[:version]}-#{digest[0, 12]}"
       end
     end
   end

@@ -31,6 +31,18 @@ RSpec.describe CollieLsp::Handlers::SemanticTokens do
       end
     end
 
+    context 'when document has no AST' do
+      let(:document_store) { test_document_store(uri: uri, text: '%token IDENTIFIER') }
+
+      it 'still returns lexical semantic tokens' do
+        expect(writer).to receive(:write) do |args|
+          expect(args[:result][:data]).not_to be_empty
+        end
+
+        described_class.handle(request, document_store, nil, writer)
+      end
+    end
+
     context 'when document does not exist' do
       let(:document_store) { CollieLsp::DocumentStore.new }
 
@@ -66,6 +78,27 @@ RSpec.describe CollieLsp::Handlers::SemanticTokens do
       expect(encoded).to be_an(Array)
       expect(encoded.size).to eq(15) # 3 tokens × 5 values
       expect(encoded[0]).to eq(0) # delta line for first token
+    end
+  end
+
+  describe '.handle_delta' do
+    let(:request) do
+      {
+        id: 1,
+        params: {
+          textDocument: { uri: uri },
+          previousResultId: 'old'
+        }
+      }
+    end
+    let(:document_store) { test_document_store(uri: uri, text: '%token IDENTIFIER') }
+
+    it 'returns semantic token edits' do
+      expect(writer).to receive(:write) do |args|
+        expect(args[:result]).to include(:resultId, :edits)
+      end
+
+      described_class.handle_delta(request, document_store, nil, writer)
     end
   end
 
