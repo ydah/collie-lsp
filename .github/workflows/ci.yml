@@ -36,3 +36,6 @@ jobs:
     - name: Compile extension
       working-directory: vscode-extension
       run: npm run compile
+    - name: Package extension
+      working-directory: vscode-extension
+      run: npm run package
