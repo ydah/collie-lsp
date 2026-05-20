@@ -2,7 +2,7 @@
   "name": "collie-lsp",
   "displayName": "Collie LSP",
   "description": "Language support for Lrama style BNF grammar files using collie-lsp",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "ydah",
   "license": "MIT",
   "repository": {

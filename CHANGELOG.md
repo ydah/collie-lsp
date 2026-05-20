@@ -7,4 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- Initial commit
+## 0.1.0
+
+- Initial LSP implementation for Lrama style BNF grammar files.
+- Added diagnostics, formatting, completion, hover, definition, references, rename, semantic tokens, folding, and workspace symbols.
+- Added VS Code extension packaging, CI quality gates, release artifacts, and Lrama-specific diagnostics.

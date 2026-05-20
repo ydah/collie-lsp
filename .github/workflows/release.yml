@@ -5,7 +5,7 @@ on:
       - 'v*'
   workflow_dispatch:
 jobs:
-  build:
+  gem:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -16,6 +16,8 @@ jobs:
         bundler-cache: true
     - name: Run quality checks
       run: bundle exec rake
+    - name: Validate release metadata
+      run: bundle exec rake release:check
     - name: Build gem
       run: bundle exec rake build
     - name: Upload gem artifact
@@ -23,8 +25,29 @@ jobs:
       with:
         name: gem
         path: pkg/*.gem
+  vscode-extension:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: npm
+        cache-dependency-path: vscode-extension/package-lock.json
+    - name: Install dependencies
+      working-directory: vscode-extension
+      run: npm ci
+    - name: Package extension
+      working-directory: vscode-extension
+      run: npm run check
+    - name: Upload VSIX artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: vscode-extension
+        path: vscode-extension/*.vsix
   publish:
-    needs: build
+    needs: gem
     if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_RUBYGEMS == 'true'
     runs-on: ubuntu-latest
     steps:

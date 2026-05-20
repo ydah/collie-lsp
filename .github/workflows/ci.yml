@@ -20,6 +20,8 @@ jobs:
         bundler-cache: true
     - name: Run quality checks
       run: bundle exec rake
+    - name: Validate release metadata
+      run: bundle exec rake release:check
   vscode-extension:
     runs-on: ubuntu-latest
     steps:
