@@ -40,7 +40,9 @@ module CollieLsp
       # @return [Array<Hash>] LSP completion items
       def build_completions(source)
         index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
-        directives + index.all_symbols.filter_map { |entry| completion_for(entry) }
+        directives +
+          index.all_symbols.filter_map { |entry| completion_for(entry) } +
+          action_reference_completions(index)
       end
 
       def directives
@@ -76,6 +78,24 @@ module CollieLsp
           kind: kind,
           detail: detail,
           documentation: documentation
+        }
+      end
+
+      def action_reference_completions(index)
+        named_references = index.entries_by_kind(:named_reference).map do |entry|
+          {
+            label: "$#{entry[:name]}",
+            kind: 6,
+            detail: "Named reference: #{entry[:name]}",
+            documentation: 'Lrama action named reference'
+          }
+        end
+
+        named_references << {
+          label: '$$',
+          kind: 6,
+          detail: 'Current semantic value',
+          documentation: 'Lrama action result value'
         }
       end
     end

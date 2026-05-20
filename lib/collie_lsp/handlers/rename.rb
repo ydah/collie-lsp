@@ -64,9 +64,11 @@ module CollieLsp
       # @return [Boolean] True if valid
       def valid_name?(old_name, new_name, ast)
         return false if new_name.empty?
+        return false if old_name.match?(/\A\$\d+\z/) || old_name == '$$'
 
         index = ast.is_a?(SymbolIndex) ? ast : SymbolIndex.build(ast, '')
         entry = index.definition_for(old_name)
+        old_name = old_name.delete_prefix('$') if old_name.start_with?('$')
 
         # Check if old symbol is a token (should be UPPER_CASE)
         is_token = entry&.dig(:kind) == :token
@@ -91,9 +93,12 @@ module CollieLsp
       # @return [Hash] LSP workspace edit
       def build_workspace_edit(uri, old_name, new_name, text, ast)
         # Find all occurrences of the symbol
-        locations = find_all_occurrences(text, old_name, ast)
+        index = ast.is_a?(SymbolIndex) ? ast : SymbolIndex.build(ast, text)
+        occurrences = index.all_occurrences(old_name)
 
-        edits = locations.map do |loc|
+        edits = occurrences.map do |entry|
+          loc = entry[:location]
+          length = loc[:length].to_i.positive? ? loc[:length].to_i : entry[:name].length
           {
             range: {
               start: {
@@ -102,10 +107,10 @@ module CollieLsp
               },
               end: {
                 line: loc[:line] - 1,
-                character: loc[:column] + old_name.length - 1
+                character: loc[:column] + length - 1
               }
             },
-            newText: new_name
+            newText: rename_text(entry, new_name)
           }
         end
 
@@ -114,6 +119,10 @@ module CollieLsp
             uri => edits
           }
         }
+      end
+
+      def rename_text(entry, new_name)
+        entry[:name].start_with?('$') ? "$#{new_name.delete_prefix('$')}" : new_name.delete_prefix('$')
       end
 
       # Find all occurrences of a symbol in the document

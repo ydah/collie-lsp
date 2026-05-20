@@ -40,4 +40,46 @@ RSpec.describe CollieLsp::SymbolIndex do
   it 'extracts symbols at LSP positions' do
     expect(described_class.symbol_at('%token IDENTIFIER', line: 0, character: 10)).to eq('IDENTIFIER')
   end
+
+  context 'with Lrama extensions' do
+    let(:source) do
+      <<~'GRAMMAR'
+        %token NUMBER
+        %rule list(item): item | list(item) item ;
+        %inline opt
+        %%
+        expr: NUMBER[num] { $$ = $num + $1; } ;
+        %%
+      GRAMMAR
+    end
+
+    it 'indexes parameterized and inline rules' do
+      expect(index.definition_for('list')).to include(kind: :parameterized_rule)
+      expect(index.definition_for('opt')).to include(kind: :inline_rule)
+    end
+
+    it 'links action named references back to bracket aliases' do
+      action_line = source.lines.find_index { |line| line.include?('$num') }
+      action_character = source.lines[action_line].index('$num') + 1
+      definition = index.definition_for_at('$num', line: action_line, character: action_character)
+
+      expect(definition).to include(kind: :reference_target)
+      expect(definition[:location]).to include(line: 5, column: 14, length: 3)
+    end
+
+    it 'links positional action references to production symbols' do
+      action_line = source.lines.find_index { |line| line.include?('$1') }
+      action_character = source.lines[action_line].index('$1') + 1
+      definition = index.definition_for_at('$1', line: action_line, character: action_character)
+
+      expect(definition).to include(kind: :reference_target)
+      expect(definition[:location]).to include(line: 5, column: 7, length: 6)
+    end
+
+    it 'includes action references when finding named reference occurrences' do
+      occurrences = index.all_occurrences('num')
+
+      expect(occurrences.map { |entry| entry[:name] }).to include('num', '$num')
+    end
+  end
 end

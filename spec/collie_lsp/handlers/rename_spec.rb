@@ -108,4 +108,22 @@ RSpec.describe CollieLsp::Handlers::Rename do
       expect(locations).to all(include(:line, :column))
     end
   end
+
+  describe '.build_workspace_edit' do
+    it 'renames named references and action references together' do
+      text = <<~'GRAMMAR'
+        %token NUMBER
+        %%
+        expr: NUMBER[num] { $$ = $num; } ;
+        %%
+      GRAMMAR
+      ast = CollieLsp::CollieWrapper.new.parse(text, filename: 'test.y')
+      index = CollieLsp::SymbolIndex.build(ast, text)
+
+      edit = described_class.build_workspace_edit(uri, 'num', 'value', text, index)
+      new_texts = edit[:changes][uri].map { |entry| entry[:newText] }
+
+      expect(new_texts).to contain_exactly('value', '$value')
+    end
+  end
 end

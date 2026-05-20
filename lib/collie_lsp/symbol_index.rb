@@ -62,19 +62,27 @@ module CollieLsp
 
     def definition_for(name)
       candidates = definitions_for(name)
+      candidates = definitions_for(name.delete_prefix('$')) if candidates.empty? && named_action_reference?(name)
       return nil if candidates.empty?
 
       candidates.min_by { |entry| definition_priority(entry[:kind]) }
     end
 
+    def definition_for_at(name, position)
+      reference = reference_at(name, position)
+      return reference_target(reference) if reference
+
+      definition_for(name)
+    end
+
     def references_for(name, include_declaration: false)
-      references = @references_by_name[name].dup
-      references.concat(definitions_for(name)) if include_declaration
+      references = references_matching(name)
+      references.concat(definitions_matching(name)) if include_declaration
       unique_by_location(references)
     end
 
     def all_occurrences(name)
-      unique_by_location(definitions_for(name) + @references_by_name[name])
+      unique_by_location(definitions_matching(name) + references_matching(name))
     end
 
     def entries_by_kind(*kinds)
@@ -222,7 +230,10 @@ module CollieLsp
     end
 
     def add_alternative_references(alternative)
-      Array(value(alternative, :symbols)).each do |symbol|
+      symbols = Array(value(alternative, :symbols))
+      named_references = {}
+
+      symbols.each do |symbol|
         name = value(symbol, :name)
         next unless name
 
@@ -231,6 +242,12 @@ module CollieLsp
           kind: value(symbol, :kind),
           location: normalize_location(value(symbol, :location), length: name.length)
         )
+
+        alias_name = value(symbol, :alias_name)
+        if alias_name
+          entry = add_named_reference(symbol, alias_name)
+          named_references[alias_name] = entry
+        end
 
         Array(value(symbol, :arguments)).each do |argument|
           argument_name = value(argument, :name)
@@ -246,6 +263,54 @@ module CollieLsp
 
       prec = value(alternative, :prec)
       add_reference(name: prec, kind: :precedence, location: find_first_location(prec)) if prec
+
+      add_action_references(alternative, symbols, named_references)
+    end
+
+    def add_named_reference(symbol, alias_name)
+      entry = compact_entry(
+        name: alias_name,
+        kind: :named_reference,
+        location: location_for_alias(symbol, alias_name),
+        detail: "Named reference for #{value(symbol, :name)}",
+        target: value(symbol, :name)
+      )
+      @entries << entry
+      @definitions_by_name[alias_name] << entry
+      @definitions_by_name["$#{alias_name}"] << entry
+      entry
+    end
+
+    def add_action_references(alternative, symbols, named_references)
+      action = value(alternative, :action)
+      code = value(action, :code)
+      action_location = value(action, :location)
+      return unless code && action_location
+
+      code.to_enum(:scan, /\$\$|\$[A-Za-z_][A-Za-z0-9_]*|\$\d+/).each do
+        match = Regexp.last_match
+        reference = match.to_s
+        target_location = action_reference_target(reference, symbols, named_references)
+
+        add_reference(
+          name: reference,
+          kind: :action_reference,
+          location: location_from_offset(action_location, code, match.begin(0), reference.length),
+          target_location: target_location
+        )
+      end
+    end
+
+    def action_reference_target(reference, symbols, named_references)
+      return nil if reference == '$$'
+
+      if reference.match?(/\A\$\d+\z/)
+        symbol = symbols[reference[1..].to_i - 1]
+        return normalize_location(value(symbol, :location), length: value(symbol, :name).to_s.length) if symbol
+      end
+
+      alias_name = reference.delete_prefix('$')
+      named_references[alias_name]&.dig(:location)
     end
 
     def add_definition(attributes)
@@ -264,6 +329,50 @@ module CollieLsp
         entry[:location] ||= find_first_location(entry[:name])
         entry[:location] ||= { line: 1, column: 1, length: entry[:name].length }
       end
+    end
+
+    def references_matching(name)
+      unless named_action_reference?(name)
+        references = @references_by_name[name].dup
+        references.concat(@references_by_name["$#{name}"]) if definitions_for("$#{name}").any?
+        return references
+      end
+
+      bare_name = name.delete_prefix('$')
+      @references_by_name[bare_name].dup + @references_by_name["$#{bare_name}"].dup
+    end
+
+    def definitions_matching(name)
+      unless named_action_reference?(name)
+        definitions = definitions_for(name).dup
+        definitions.concat(definitions_for("$#{name}")) if definitions_for("$#{name}").any?
+        return definitions
+      end
+
+      bare_name = name.delete_prefix('$')
+      definitions_for(bare_name).dup + definitions_for("$#{bare_name}").dup
+    end
+
+    def named_action_reference?(name)
+      name.start_with?('$') && name.match?(/\A\$[A-Za-z_][A-Za-z0-9_]*\z/)
+    end
+
+    def reference_at(name, position)
+      references_matching(name).find do |entry|
+        location_contains_position?(entry[:location], position)
+      end
+    end
+
+    def reference_target(reference)
+      target_location = reference[:target_location]
+      return nil unless target_location
+
+      {
+        name: reference[:name],
+        kind: :reference_target,
+        location: target_location,
+        detail: 'Reference target'
+      }
     end
 
     def declaration_kind(declaration)
@@ -325,6 +434,46 @@ module CollieLsp
       }
     end
 
+    def location_for_alias(symbol, alias_name)
+      location = normalize_location(value(symbol, :location), length: alias_name.length)
+      return find_first_location(alias_name) unless location
+
+      line_text = @text.lines[location[:line] - 1]
+      return location unless line_text
+
+      bracket = "[#{alias_name}]"
+      match_column = line_text.index(bracket, [location[:column] - 1, 0].max)
+      return location unless match_column
+
+      {
+        line: location[:line],
+        column: match_column + 2,
+        length: alias_name.length
+      }
+    end
+
+    def location_from_offset(base_location, source, offset, length)
+      location = normalize_location(base_location, length: length)
+      return nil unless location
+
+      prefix = source[0...offset]
+      lines = prefix.split("\n", -1)
+
+      if lines.size == 1
+        {
+          line: location[:line],
+          column: location[:column] + offset,
+          length: length
+        }
+      else
+        {
+          line: location[:line] + lines.size - 1,
+          column: lines.last.length + 1,
+          length: length
+        }
+      end
+    end
+
     def find_first_location(name)
       return nil unless name
 
@@ -378,6 +527,18 @@ module CollieLsp
         location = entry[:location]
         [entry[:name], entry[:kind], location[:line], location[:column]]
       end
+    end
+
+    def location_contains_position?(location, position)
+      return false unless location
+
+      line = location[:line] - 1
+      start_character = location[:column] - 1
+      length = location[:length].to_i.positive? ? location[:length].to_i : 1
+
+      position[:line] == line &&
+        position[:character] >= start_character &&
+        position[:character] <= start_character + length
     end
   end
 end

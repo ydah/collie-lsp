@@ -33,7 +33,7 @@ module CollieLsp
           return
         end
 
-        hover_content = build_hover_content(index, symbol)
+        hover_content = build_hover_content(index, symbol, position: position)
 
         if hover_content
           writer.write(
@@ -59,9 +59,9 @@ module CollieLsp
       # @param source [SymbolIndex, Object] Parsed symbol source
       # @param symbol [String] Symbol name
       # @return [Hash, nil] LSP markup content or nil
-      def build_hover_content(source, symbol)
+      def build_hover_content(source, symbol, position: nil)
         index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
-        entry = index.definition_for(symbol)
+        entry = position ? index.definition_for_at(symbol, position) : index.definition_for(symbol)
         return nil unless entry
 
         {
@@ -85,6 +85,10 @@ module CollieLsp
           "**Type**: `#{entry[:name]}`\n\nTag: `#{entry[:type_tag] || 'none'}`"
         when :precedence
           "**Precedence**: `#{entry[:name]}`\n\nAssociativity: `#{entry[:associativity]}`"
+        when :named_reference
+          "**Named reference**: `#{entry[:name]}`\n\nTarget: `#{entry[:target]}`"
+        when :reference_target
+          "**Reference target**: `#{entry[:name]}`"
         else
           "**Symbol**: `#{entry[:name]}`"
         end

@@ -33,7 +33,7 @@ module CollieLsp
           return
         end
 
-        location = find_definition_location(index, symbol, uri)
+        location = find_definition_location(index, symbol, uri, position)
 
         if location
           writer.write(id: request[:id], result: location)
@@ -55,9 +55,9 @@ module CollieLsp
       # @param symbol [String] Symbol name
       # @param uri [String] Document URI
       # @return [Hash, nil] LSP location or nil
-      def find_definition_location(source, symbol, uri)
+      def find_definition_location(source, symbol, uri, position = nil)
         index = source.is_a?(SymbolIndex) ? source : SymbolIndex.build(source, '')
-        entry = index.definition_for(symbol)
+        entry = position ? index.definition_for_at(symbol, position) : index.definition_for(symbol)
         return nil unless entry
 
         Support.location_to_lsp(uri, entry[:location])
