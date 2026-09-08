@@ -3,121 +3,85 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Editor intelligence for Lrama-style BNF grammar files: diagnostics, formatting, completion, navigation, and refactoring.">
-    <meta name="theme-color" content="#123047">
-    <meta property="og:title" content="Collie LSP — Editor intelligence for Lrama grammars">
-    <meta property="og:description" content="Write .y files with diagnostics, completion, navigation, formatting, and safe renaming in any LSP-compatible editor.">
+    <meta name="description" content="Language server for Lrama-style BNF grammar files.">
+    <meta name="theme-color" content="#ffffff">
+    <meta property="og:title" content="collie-lsp">
+    <meta property="og:description" content="Language server for Lrama-style BNF grammar files.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://ydah.github.io/collie-lsp/">
     <link rel="canonical" href="https://ydah.github.io/collie-lsp/">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23123047'/%3E%3Cpath d='M19 17h26v8H27v14h18v8H19z' fill='%23F4B942'/%3E%3C/svg%3E">
-    <title>Collie LSP — Editor intelligence for Lrama grammars</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23171717'/%3E%3Cpath d='M18 16h30v8H27v16h21v8H18z' fill='white'/%3E%3C/svg%3E">
+    <title>collie-lsp</title>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="Collie LSP home">
-        <svg aria-hidden="true" viewBox="0 0 32 32">
-          <path d="M5 4h22v7H12v10h15v7H5z"/>
-        </svg>
-        <span>Collie LSP</span>
-      </a>
+
+    <header>
+      <a class="brand" href="#top">collie-lsp</a>
       <nav aria-label="Main navigation">
-        <a href="#capabilities">Capabilities</a>
-        <a href="#install">Install</a>
+        <a href="#features">Features</a>
+        <a href="#setup">Setup</a>
         <a href="https://github.com/ydah/collie-lsp">GitHub</a>
       </nav>
     </header>
 
     <main id="main">
       <section class="hero" id="top">
-        <div class="hero-copy">
-          <p class="context">Language support for Lrama-style BNF</p>
-          <h1 class="text-balance">Grammar files deserve first-class editor tooling.</h1>
-          <p class="lede text-pretty">Collie LSP brings diagnostics, completion, navigation, formatting, and safe refactoring to <code>.y</code> files in any LSP-compatible editor.</p>
-          <div class="hero-actions">
-            <a class="button" href="#install">Install Collie LSP</a>
-            <a class="text-link" href="https://github.com/ydah/collie-lsp">View the source</a>
-          </div>
-          <p class="release tabular-nums">Open source · MIT · v0.1.0</p>
+        <div>
+          <h1 class="text-balance">collie-lsp</h1>
+          <p class="summary text-pretty">Language server for Lrama-style BNF grammar files.</p>
+          <pre class="install-command"><code>gem install collie-lsp</code></pre>
+          <p class="meta tabular-nums"><span>Ruby 3.2+</span><span>MIT</span><span>v0.1.0</span></p>
         </div>
 
-        <figure class="editor" aria-label="Lrama grammar with Collie LSP language support">
-          <figcaption>
-            <span class="file-tab">parser.y</span>
-            <span class="server-state"><span aria-hidden="true">●</span> collie-lsp active</span>
-          </figcaption>
-          <pre aria-label="Example grammar"><code><span class="line"><b>1</b><span class="keyword">%token</span> <span class="token">NUMBER PLUS</span></span>
-<span class="line"><b>2</b><span class="keyword">%left</span>  <span class="token">PLUS</span></span>
-<span class="line"><b>3</b></span>
-<span class="line"><b>4</b><span class="keyword">%%</span></span>
-<span class="line"><b>5</b><span class="symbol">expr</span>:</span>
-<span class="line active"><b>6</b>  <span class="token">NUMBER</span></span>
-<span class="line"><b>7</b>| <span class="symbol">expr</span> <span class="token">PLUS</span> <span class="symbol">expr</span></span>
-<span class="line"><b>8</b>;</span></code></pre>
-          <div class="insight">
-            <span class="insight-kind">token</span>
-            <strong>NUMBER</strong>
-            <span>Declared on line 1</span>
-          </div>
-          <div class="editor-status">
-            <span>yacc</span>
-            <span class="tabular-nums">0 diagnostics</span>
-          </div>
+        <figure class="grammar">
+          <figcaption>parser.y</figcaption>
+          <pre aria-label="Example Lrama grammar"><code><span class="keyword">%token</span> <span class="token">NUMBER PLUS</span>
+<span class="keyword">%left</span>  <span class="token">PLUS</span>
+
+<span class="keyword">%%</span>
+
+<span class="symbol">expr</span>:
+  <span class="token">NUMBER</span>
+| <span class="symbol">expr</span> <span class="token">PLUS</span> <span class="symbol">expr</span>
+;</code></pre>
         </figure>
       </section>
 
-      <section class="capabilities" id="capabilities">
-        <div class="section-intro">
-          <h2 class="text-balance">Keep the whole grammar within reach.</h2>
-          <p class="text-pretty">Collie understands the symbols and structure behind your grammar, so routine editor actions work where you need them.</p>
-        </div>
-        <div class="capability-list">
-          <article><h3>Diagnose as you type</h3><p>See lint errors and style violations beside the grammar that caused them.</p></article>
-          <article><h3>Complete real symbols</h3><p>Finish declared tokens, nonterminals, and grammar keywords from context.</p></article>
-          <article><h3>Navigate definitions</h3><p>Jump to declarations, find references, and search workspace symbols.</p></article>
-          <article><h3>Refactor safely</h3><p>Rename a symbol with validation and update its uses together.</p></article>
-          <article><h3>Format consistently</h3><p>Apply your configured indentation, alignment, and line length.</p></article>
-          <article><h3>Read dense files faster</h3><p>Use semantic highlighting, hover details, outlines, and code folding.</p></article>
-        </div>
+      <div class="grammar-break" aria-hidden="true">%%</div>
+
+      <section class="section" id="features">
+        <h2 class="text-balance">Language features</h2>
+        <ul class="feature-list">
+          <li><strong>Diagnostics</strong><span>Lint errors and style violations as you type.</span></li>
+          <li><strong>Completion</strong><span>Tokens, nonterminals, and grammar keywords.</span></li>
+          <li><strong>Navigation</strong><span>Definitions, references, symbols, and hover details.</span></li>
+          <li><strong>Refactoring</strong><span>Validated symbol renaming and quick fixes.</span></li>
+          <li><strong>Formatting</strong><span>Configurable indentation, alignment, and line length.</span></li>
+          <li><strong>Structure</strong><span>Semantic highlighting, outlines, and folding.</span></li>
+        </ul>
       </section>
 
-      <section class="install" id="install">
-        <div class="install-heading">
-          <p class="context">Two steps, then stay in your editor.</p>
-          <h2 class="text-balance">Put Collie on grammar duty.</h2>
-          <p class="text-pretty">Ruby 3.2 or newer is required.</p>
+      <section class="section setup" id="setup">
+        <h2 class="text-balance">Editor setup</h2>
+        <div>
+          <p class="text-pretty">Configure your LSP client to start:</p>
+          <pre><code>collie-lsp --stdio</code></pre>
+          <p class="clients text-pretty">VS Code, Neovim, Emacs, Vim, and other LSP-compatible editors are supported.</p>
+          <a href="https://github.com/ydah/collie-lsp#editor-configuration">Configuration examples</a>
         </div>
-        <ol class="install-steps">
-          <li>
-            <div class="step-number tabular-nums">1</div>
-            <div>
-              <h3>Install the server</h3>
-              <pre><code>gem install collie-lsp</code></pre>
-            </div>
-          </li>
-          <li>
-            <div class="step-number tabular-nums">2</div>
-            <div>
-              <h3>Connect your editor</h3>
-              <p>Run <code>collie-lsp --stdio</code> from VS Code, Neovim, Emacs, Vim, or another LSP client.</p>
-              <a class="text-link" href="https://github.com/ydah/collie-lsp#editor-configuration">See editor configuration</a>
-            </div>
-          </li>
-        </ol>
       </section>
     </main>
 
     <footer>
-      <p>Built for Lrama grammar authors.</p>
+      <span>collie-lsp</span>
       <div>
-        <a href="https://github.com/ydah/collie-lsp">Source</a>
         <a href="https://github.com/ydah/collie-lsp/issues">Issues</a>
-        <a href="https://github.com/ydah/collie-lsp/blob/main/LICENSE">MIT License</a>
+        <a href="https://github.com/ydah/collie-lsp/blob/main/LICENSE">License</a>
       </div>
     </footer>
   </body>
