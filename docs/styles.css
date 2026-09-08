@@ -77,9 +77,9 @@ nav a:hover { text-decoration: underline; }
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, .9fr);
-  gap: clamp(4rem, 10vw, 8rem);
+  gap: clamp(3rem, 7vw, 6rem);
   align-items: center;
-  padding-block: clamp(6rem, 12vw, 9rem);
+  padding-block: clamp(4rem, 8vw, 6rem);
 }
 
 h1, h2, p { margin-top: 0; }
@@ -145,23 +145,13 @@ h1 {
 .token { font-weight: 500; }
 .symbol { color: var(--muted); }
 
-.grammar-break {
-  padding-block: 1.25rem;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 1.1rem;
-}
-
 .section {
   display: grid;
   grid-template-columns: minmax(200px, .65fr) minmax(0, 1.35fr);
   gap: clamp(3rem, 10vw, 8rem);
   padding-block: clamp(5rem, 10vw, 8rem);
+  border-top: 1px solid var(--line);
 }
-
-.section + .section { border-top: 1px solid var(--line); }
 
 h2 {
   margin-bottom: 0;
@@ -210,9 +200,8 @@ footer div { display: flex; gap: 1.5rem; }
 @media (max-width: 760px) {
   header, main, footer { width: min(100% - 32px, 1040px); }
   nav { gap: 1rem; font-size: .88rem; }
-  nav a:first-child { display: none; }
   .hero, .section { grid-template-columns: 1fr; }
-  .hero { gap: 4.5rem; padding-block: 5rem; }
+  .hero { gap: 3rem; padding-block: 3.5rem; }
   .section { gap: 2.5rem; }
   .feature-list { grid-template-columns: 1fr; }
 }
